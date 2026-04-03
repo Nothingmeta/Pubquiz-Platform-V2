@@ -43,6 +43,7 @@
     </div>
 
     <div id="status" class="mt-3 text-muted"></div>
+    <countdown-timer id="questionTimer" duration="30"></countdown-timer>
     <div id="overviewPanel" class="mt-3"></div>
 
     <!-- Scores panel (hidden until ShowScores arrives) -->
@@ -50,6 +51,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+<script type="module" src="~/js/components/countdown-timer.js"></script>
 <script>
     // Preloaded questions (immutable snapshot from server render)
     const clientQuestions = @Html.Raw(jsQuestions);
@@ -420,13 +422,17 @@
         });
     }
 
+    const timer = document.getElementById('questionTimer');
     // Receive server-driven show (server payload minimal: { questionId, questionIndex?, answers?, currentQuestionText? })
     connection.on("ShowQuestion", function(payload) {
         if (!payload) return;
         // If server supplies answers array use it for rendering (server ordering),
         // otherwise fallback to using preloaded client snapshot.
         const serverAnswers = payload.answers && payload.answers.length > 0 ? payload.answers : null;
-
+        if (timer) {
+        const dur = payload && payload.duration ? payload.duration : Number(timer.getAttribute('duration')) || 30;
+        timer.run(dur);
+        }
         // If server supplies index use it; otherwise find by id in preloaded list
         if (payload.questionIndex !== undefined && payload.questionIndex !== null) {
             renderQuestionByIndex(payload.questionIndex, serverAnswers);
@@ -458,6 +464,7 @@
     // Show results payload (colors & lists)
     connection.on("ShowResults", function(payload) {
         try {
+            if (timer) timer.stop();
             // hide any scores panel while reviewing results
             hideScoresPanel();
             if (typeof showResults === "function") {
@@ -482,6 +489,7 @@
     // Final scores
     connection.on("ShowScores", function(payload) {
         try {
+            if (timer) timer.stop();
             showScores(payload);
         } catch (err) {
             console.error("ShowScores handler error:", err);
@@ -536,4 +544,14 @@
         // Fallback: render initial question so the page is usable offline
         renderQuestionByIndex(currentIndex);
     });
+    if (timer) {
+    timer.addEventListener('finished', () => {
+    // Example: notify server that time expired for this player (adapt to your API)
+    if (!isQuizMaster && currentQuestionId && playerName) {
+    // choose behavior that matches your server API:
+    // connection.invoke("SubmitAnswer", lobbyCode, playerName, currentQuestionId, null).catch(e => console.error(e));
+    connection.invoke("TimeUp", lobbyCode, currentQuestionId).catch(e => console.error(e));
+    }
+    });
+    }
 </script>
