@@ -1,0 +1,104 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@{
+}
+@model IEnumerable<Pubquiz_Platform_V2.ViewModels.QuizViewModel>
+@{
+    ViewData["Title"] = "Quiz beheer";
+}
+
+<div class="container d-flex flex-column align-items-center" style="min-height: 100vh;">
+    <!-- Hamburger menu -->
+    <div class="w-100 d-flex justify-content-start mb-3">
+        <div class="dropdown">
+            <button class="btn btn-outline-secondary" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-list"></i>
+            </button>
+            <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                <li><a class="dropdown-item" href="/">Home</a></li>
+                <li><a class="dropdown-item" href="/Quiz/Manage">Quiz beheer</a></li>
+                <li><a class="dropdown-item" href="/Account/Profile">Profiel</a></li>
+            </ul>
+        </div>
+        <span class="ms-3 align-self-center fw-bold">Pubquiz Platform</span>
+    </div>
+
+    <h2 class="mb-4">Quiz beheer</h2>
+
+    <div class="card w-100" style="max-width: 350px;">
+        <ul class="list-group list-group-flush">
+            
+            @if(Model != null){
+                foreach (var quiz in Model)
+            {
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>@quiz.QuizName</span>
+                    <span>
+                            <a href="/Quiz/Edit/@quiz.QuizSlug" class="btn btn-sm btn-outline-secondary me-2" title="Bewerken">
+                            <i class="bi bi-gear"></i>
+                        </a>
+                        <form method="post" action="/Quiz/Delete/@quiz.Id" class="d-inline">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Verwijderen" onclick="return confirm('Weet je zeker dat je deze quiz wilt verwijderen?');">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </form>
+                    </span>
+                    </li>
+                }
+            } else
+            {
+                  <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>Geen quizzen gevonden.</span>
+                  </li>
+            }
+        </ul>
+    </div>
+
+    <!-- Button to open modal -->
+    <button class="btn btn-primary mt-4 w-100" style="max-width: 350px;" data-bs-toggle="modal" data-bs-target="#createQuizModal">
+        Nieuw Quiz
+    </button>
+
+    <!-- Modal -->
+    <div class="modal fade" id="createQuizModal" tabindex="-1" aria-labelledby="createQuizModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="createQuizForm">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="createQuizModalLabel">Nieuwe Quiz</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Sluiten"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="quizName" class="form-label">Quiznaam</label>
+                            <input type="text" class="form-control" id="quizName" name="QuizName" required />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">Aanmaken</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    document.getElementById('createQuizForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const quizName = document.getElementById('quizName').value;
+        const response = await fetch('/Quiz/CreateQuick', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val() },
+            body: JSON.stringify({ QuizName: quizName })
+        });
+        if (response.ok) {
+            const data = await response.json();
+            window.location.href = `/Quiz/Edit/${data.quizSlug}`;
+        } else if (response.status === 409) {
+            alert('Er bestaat al een quiz met deze naam.');
+        } else {
+            alert('Quiz aanmaken mislukt.');
+        }
+    });
+</script>

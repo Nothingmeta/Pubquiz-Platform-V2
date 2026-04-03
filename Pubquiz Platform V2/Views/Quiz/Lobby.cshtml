@@ -1,0 +1,72 @@
+﻿@model Pubquiz_Platform_V2.ViewModels.LobbyViewModel
+@{
+    ViewData["Title"] = "Lobby";
+    ViewData["CurrentUserName"] = User.Identity?.Name;
+}
+<div class="container mt-5">
+    <h2>Lobby: @Model.QuizName</h2>
+    <p><strong>Quizmaster:</strong> @Model.QuizMasterName</p>
+    <p><strong>Lobbycode:</strong> @Model.LobbyCode</p>
+    <h4>Spelers in de lobby:</h4>
+    <ul id="playerList">
+        @foreach (var player in Model.Players)
+        {
+            <li>@player</li>
+        }
+    </ul>
+    @if (User.IsInRole("quizmaster"))
+    {
+        <button onclick="startQuiz()" class="btn btn-success">Start Quiz</button>
+    }
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+<script>
+    let playerName = null;
+    const lobbyCode = "@Model.LobbyCode";
+    const currentUserName = "@(ViewData["CurrentUserName"] ?? "")";
+
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl("/quizlobbyhub")
+        .build();
+
+    connection.on("PlayerListUpdated", function(playerList) {
+        const list = document.getElementById("playerList");
+        list.innerHTML = "";
+        playerList.forEach(function(name) {
+            const li = document.createElement("li");
+            li.textContent = name;
+            list.appendChild(li);
+        });
+    });
+
+        // Handle lobby closed by quizmaster
+    connection.on("LobbyClosed", function() {
+        alert("De quizmaster heeft de lobby verlaten. Je wordt teruggestuurd naar het overzicht.");
+        window.location.href = "/Quiz/LobbyOverview";
+    });
+
+    connection.start().then(function() {
+        if (currentUserName) {
+            playerName = currentUserName;
+            connection.invoke("JoinLobby", lobbyCode, playerName);
+        } else {
+            playerName = prompt("Vul je naam in:");
+            if (playerName) {
+                connection.invoke("JoinLobby", lobbyCode, playerName);
+            }
+        }
+    });
+
+    window.addEventListener("beforeunload", function () {
+        if (playerName) {
+            connection.invoke("LeaveLobby", lobbyCode, playerName);
+        }
+    });
+
+    function startQuiz() {
+        connection.invoke("StartQuiz", lobbyCode, currentUserName);
+    }
+    connection.on("QuizStarted", function(lobbyCode) {
+        window.location.href = "/Quiz/Play?lobbyCode=" + lobbyCode;
+    });
+</script>

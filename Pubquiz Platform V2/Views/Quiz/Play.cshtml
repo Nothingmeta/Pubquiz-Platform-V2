@@ -1,0 +1,539 @@
+﻿@model Pubquiz_Platform_V2.ViewModels.QuizPlayFullViewModel
+@{
+    ViewData["Title"] = Model.QuizName;
+    var isQuizMaster = User.IsInRole("QuizMaster") || User.IsInRole("quizmaster");
+    var lobbyCode = Model.LobbyCode;
+    var currentUserName = User.Identity?.Name ?? "";
+
+    // Lightweight, safe JSON payload for client navigation
+    var jsQuestions = System.Text.Json.JsonSerializer.Serialize(
+        Model.Questions.Select(q => new
+        {
+            questionId = q.QuestionId,
+            questionText = q.QuestionText,
+            answers = q.Answers ?? new List<string>(),
+            // Only present for quizmaster
+            correctAnswerIndex = isQuizMaster ? q.CorrectAnswerIndex : null
+        })
+    );
+
+    var initialIndex = Model.CurrentQuestionIndex;
+}
+<div class="container mt-5" id="quizContainer">
+    <h2 id="quizName">@Model.QuizName</h2>
+
+    <div class="card mt-3">
+        <div class="card-body">
+            <h4 id="questionText" class="card-title"></h4>
+            <div id="answersContainer" class="row mt-3"></div>
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            @if (isQuizMaster)
+            {
+                <div>
+                    <button id="prevBtn" class="btn btn-outline-secondary" onclick="prevQuestion()">Vorige</button>
+                    <button id="nextLocalBtn" class="btn btn-outline-secondary ms-2" onclick="nextLocal()">Volgende</button>
+                </div>
+
+                <div>
+                    <button id="nextServerBtn" class="btn btn-success" onclick="nextQuestion()">Publiceer Volgende (server)</button>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div id="status" class="mt-3 text-muted"></div>
+    <div id="overviewPanel" class="mt-3"></div>
+
+    <!-- Scores panel (hidden until ShowScores arrives) -->
+    <div id="scoresPanel" class="mt-3" style="display:none;"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+<script>
+    // Preloaded questions (immutable snapshot from server render)
+    const clientQuestions = @Html.Raw(jsQuestions);
+    let currentIndex = @initialIndex;
+
+    // Lobby / user info from server-render
+    const lobbyCode = "@lobbyCode";
+    const currentUserName = "@currentUserName";
+    const isQuizMaster = @isQuizMaster.ToString().ToLower();
+
+    // Local state
+    let playerName = null;
+    let currentQuestionId = null;
+    let lastChosenIndex = null; // local visual hint
+
+    // Persist last known answered counts so UI restores them after short "player answered" flash
+    let lastAnsweredCount = 0;
+    let lastTotalCount = clientQuestions ? clientQuestions.length : 0;
+
+    // Minimal SignalR connection (used for join + show question/results)
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl("/quizlobbyhub")
+        .build();
+
+    // Render helpers (very small, deterministic)
+    function showWaitingForStart() {
+        document.getElementById("questionText").textContent = "Waiting for the Quizmaster to start...";
+        document.getElementById("answersContainer").innerHTML = "";
+        currentQuestionId = null;
+        // Keep status clear / explanatory
+        document.getElementById("status").textContent = "Waiting for Quizmaster to start the quiz.";
+        document.getElementById("overviewPanel").innerHTML = "";
+        hideScoresPanel();
+    }
+
+    function renderQuestionByIndex(idx, serverAnswers /* optional array from server */) {
+        hideScoresPanel();
+        if (!clientQuestions || clientQuestions.length === 0) {
+            document.getElementById("questionText").textContent = "No questions available.";
+            document.getElementById("answersContainer").innerHTML = "";
+            currentQuestionId = null;
+            return;
+        }
+        if (idx < 0) idx = 0;
+        if (idx >= clientQuestions.length) idx = clientQuestions.length - 1;
+        currentIndex = idx;
+
+        const q = clientQuestions[currentIndex];
+        document.getElementById("questionText").textContent = q.questionText || "";
+        const answersContainer = document.getElementById("answersContainer");
+        answersContainer.innerHTML = "";
+
+        // Set current question id for SubmitAnswer calls
+        currentQuestionId = q.questionId;
+
+        // Prefer server-supplied answers order (serverAnswers) if present,
+        // because server may reorder answers so the correct one is index 0.
+        const answers = serverAnswers || q.answers || [];
+
+        (answers || []).forEach((a, i) => {
+            const col = document.createElement("div");
+            col.className = "col-6 mb-2";
+            const btn = document.createElement("button");
+            btn.className = "btn btn-outline-primary w-100 answer-btn";
+            btn.textContent = a;
+            btn.dataset.answerIndex = i;
+
+            // Only wire up click -> server for non-quizmaster clients
+            if (!isQuizMaster) {
+                btn.addEventListener("click", () => onAnswerClicked(i, btn));
+            } else {
+                // quizmaster shouldn't be able to answer, keep buttons disabled
+                btn.disabled = true;
+            }
+
+            col.appendChild(btn);
+            answersContainer.appendChild(col);
+        });
+
+        // Show counts if available
+        updateStatusWithCounts();
+        // Clear overview panel when showing a new question
+        document.getElementById("overviewPanel").innerHTML = "";
+        lastChosenIndex = null;
+    }
+
+    // Apply result coloring to answer buttons
+    function applyResultsToAnswers(payload) {
+        const btns = Array.from(document.querySelectorAll(".answer-btn"));
+        if (!btns || btns.length === 0) return;
+
+        // Build chosen counts per index from answersMap (playerName -> index)
+        const chosenCounts = {};
+        if (payload.answersMap) {
+            Object.values(payload.answersMap).forEach(idx => {
+                if (idx === null || idx === undefined) return;
+                chosenCounts[idx] = (chosenCounts[idx] || 0) + 1;
+            });
+        }
+
+        btns.forEach(btn => {
+            const idx = parseInt(btn.dataset.answerIndex, 10);
+            // reset classes first
+            btn.className = btn.className.split(" ").filter(c => c !== "btn-success" && c !== "btn-danger" && c !== "btn-warning" && c !== "btn-outline-primary").join(" ") + " btn-outline-primary w-100";
+            // color correct
+            if (typeof payload.correctIndex !== "undefined" && payload.correctIndex !== null && idx === payload.correctIndex) {
+                btn.classList.remove("btn-outline-primary");
+                btn.classList.add("btn-success");
+            } else if (chosenCounts[idx] > 0) {
+                // wrong but chosen by someone
+                btn.classList.remove("btn-outline-primary");
+                btn.classList.add("btn-danger");
+            }
+        });
+    }
+
+    // Render detailed result overlay (ShowResults)
+    function showResults(payload) {
+        if (!payload) return;
+
+        // If server supplied answers array, re-render to match server ordering
+        if (payload.answers && payload.answers.length > 0) {
+            // Try to align to a known question index if possible
+            let idx = -1;
+            if (payload.questionId) {
+                idx = clientQuestions.findIndex(q => q.questionId == payload.questionId);
+            }
+            if (idx === -1) idx = currentIndex;
+            renderQuestionByIndex(idx, payload.answers);
+            // ensure currentQuestionId matches server-provided id in case reordering used a different snapshot
+            currentQuestionId = payload.questionId || currentQuestionId;
+        }
+
+        // Apply colors / markings
+        applyResultsToAnswers(payload);
+
+        // Build a simple results list with players shown
+        const overview = document.getElementById("overviewPanel");
+        overview.innerHTML = "";
+        const title = document.createElement("div");
+        title.innerHTML = `<strong>Results: </strong>${payload.questionText || ""}`;
+        overview.appendChild(title);
+
+        const lists = document.createElement("div");
+        lists.className = "mt-2";
+
+        const formatList = (titleText, arr) => {
+            const wrapper = document.createElement("div");
+            wrapper.className = "mb-2";
+            const h = document.createElement("div");
+            h.innerHTML = `<strong>${titleText} (${(arr || []).length})</strong>`;
+            wrapper.appendChild(h);
+            if (arr && arr.length > 0) {
+                const ul = document.createElement("ul");
+                (arr || []).forEach(p => {
+                    const li = document.createElement("li");
+                    li.textContent = p;
+                    ul.appendChild(li);
+                });
+                wrapper.appendChild(ul);
+            } else {
+                const none = document.createElement("div");
+                none.className = "text-muted";
+                none.textContent = "(none)";
+                wrapper.appendChild(none);
+            }
+            return wrapper;
+        };
+
+        lists.appendChild(formatList("Correct", payload.correctPlayers || []));
+        lists.appendChild(formatList("Incorrect", payload.incorrectPlayers || []));
+        lists.appendChild(formatList("No Answer", payload.noAnswerPlayers || []));
+        overview.appendChild(lists);
+    }
+
+    // Render a compact overview (ShowOverview)
+    function showOverview(payload) {
+        if (!payload) return;
+        const overview = document.getElementById("overviewPanel");
+        overview.innerHTML = "";
+
+        const title = document.createElement("div");
+        title.innerHTML = `<strong>Overview: </strong>${payload.questionText || ""}`;
+        overview.appendChild(title);
+
+        const summary = document.createElement("div");
+        summary.className = "mt-2";
+
+        const makeBadgeList = (label, arr, badgeClass) => {
+            const container = document.createElement("div");
+            const lbl = document.createElement("div");
+            lbl.innerHTML = `<strong>${label} (${(arr || []).length})</strong>`;
+            container.appendChild(lbl);
+            const wrap = document.createElement("div");
+            (arr || []).forEach(p => {
+                const span = document.createElement("span");
+                span.className = `badge ${badgeClass} me-1`;
+                span.textContent = p;
+                wrap.appendChild(span);
+            });
+            if ((!arr || arr.length === 0)) {
+                const none = document.createElement("span");
+                none.className = "text-muted";
+                none.textContent = "(none)";
+                wrap.appendChild(none);
+            }
+            container.appendChild(wrap);
+            return container;
+        };
+
+        summary.appendChild(makeBadgeList("Correct", payload.correctPlayers || [], "bg-success"));
+        summary.appendChild(makeBadgeList("Incorrect", payload.incorrectPlayers || [], "bg-danger"));
+        summary.appendChild(makeBadgeList("No Answer", payload.noAnswerPlayers || [], "bg-secondary"));
+        overview.appendChild(summary);
+    }
+
+    function showScores(payload) {
+        // payload: { leaderboard: [{ name, score, rank }, ...], totalPlayers, totalQuestions }
+        if (!payload || !payload.leaderboard) return;
+        const panel = document.getElementById("scoresPanel");
+        panel.style.display = "block";
+        panel.innerHTML = "";
+
+        const title = document.createElement("h4");
+        title.textContent = "Final Scores";
+        panel.appendChild(title);
+
+        // Build table
+        const table = document.createElement("table");
+        table.className = "table table-striped mt-2";
+        const thead = document.createElement("thead");
+        thead.innerHTML = "<tr><th>Rank</th><th>Player</th><th>Score</th><th>Percent</th></tr>";
+        table.appendChild(thead);
+        const tbody = document.createElement("tbody");
+
+        let myRow = null;
+        payload.leaderboard.forEach(item => {
+            const tr = document.createElement("tr");
+            const tdRank = document.createElement("td");
+            tdRank.textContent = item.rank;
+            const tdName = document.createElement("td");
+            tdName.textContent = item.name;
+            const tdScore = document.createElement("td");
+            tdScore.textContent = item.score;
+            const tdPercent = document.createElement("td");
+            const totalQ = payload.totalQuestions || 0;
+            const percent = totalQ > 0 ? Math.round((item.score / totalQ) * 100) : 0;
+            tdPercent.textContent = percent + "%";
+            tr.appendChild(tdRank);
+            tr.appendChild(tdName);
+            tr.appendChild(tdScore);
+            tr.appendChild(tdPercent);
+
+            // highlight current user
+            if (currentUserName && item.name && item.name.toLowerCase() === currentUserName.toLowerCase()) {
+                tr.className = "table-success";
+                myRow = { name: item.name, score: item.score, rank: item.rank, percent: percent };
+            }
+            tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+        panel.appendChild(table);
+
+        // Personal summary for player (if not quizmaster)
+        const summary = document.createElement("div");
+        summary.className = "mt-3";
+        if (isQuizMaster) {
+            summary.innerHTML = "<strong>Quizmaster view:</strong> full leaderboard shown above.";
+        } else {
+            if (myRow) {
+                summary.innerHTML = `<strong>Your score:</strong> ${myRow.score} — <strong>Position:</strong> ${myRow.rank}/${payload.totalPlayers} — <strong>Percent correct:</strong> ${myRow.percent}%`;
+            } else {
+                summary.innerHTML = "<strong>Your score:</strong> (not recorded)";
+            }
+        }
+        panel.appendChild(summary);
+
+        // Back to main menu button (visible to everyone)
+        const backBtn = document.createElement("button");
+        backBtn.className = "btn btn-primary mt-3";
+        backBtn.textContent = "Back to main menu";
+        backBtn.addEventListener("click", () => {
+            window.location.href = "/";
+        });
+        panel.appendChild(backBtn);
+
+        // Clear question area
+        document.getElementById("questionText").textContent = "";
+        document.getElementById("answersContainer").innerHTML = "";
+        document.getElementById("overviewPanel").innerHTML = "";
+        // hide status as quiz finished
+        document.getElementById("status").textContent = "Quiz finished. See final scores below.";
+    }
+
+    function hideScoresPanel() {
+        const panel = document.getElementById("scoresPanel");
+        panel.style.display = "none";
+        panel.innerHTML = "";
+    }
+
+    function updateStatusWithCounts() {
+        const status = document.getElementById("status");
+        status.textContent = `Question ${currentIndex + 1} / ${clientQuestions.length}`;
+        // Show answered counts when we have a total value
+        if (typeof lastAnsweredCount === "number" && typeof lastTotalCount === "number") {
+            status.textContent += ` — Answered: ${lastAnsweredCount} / ${lastTotalCount}`;
+        }
+    }
+
+    // Local navigation (client-only)
+    function nextLocal() {
+        if (currentIndex < clientQuestions.length - 1) {
+            renderQuestionByIndex(currentIndex + 1);
+        }
+    }
+    function prevQuestion() {
+        if (currentIndex > 0) {
+            renderQuestionByIndex(currentIndex - 1);
+        }
+    }
+
+    // For quizmaster: tell server to advance (server should broadcast ShowQuestion/ShowResults/ShowOverview to group)
+    function nextQuestion() {
+        connection.invoke("NextQuestion", lobbyCode)
+            .catch(err => console.error("NextQuestion failed:", err));
+    }
+
+    // Answer click handler (players)
+    function onAnswerClicked(answerIndex, btnElement) {
+        if (!playerName) {
+            // if not known, prompt and join the lobby
+            const n = prompt("Enter your name:");
+            if (!n) return;
+            playerName = n;
+            connection.invoke("JoinLobby", lobbyCode, playerName).catch(e => console.error(e));
+        }
+
+        if (isQuizMaster) return; // safety
+
+        if (!currentQuestionId) {
+            console.warn("No active question id to submit for.");
+            return;
+        }
+
+        // Visual immediate feedback: mark chosen
+        clearChosenVisual();
+        btnElement.classList.remove("btn-outline-primary");
+        btnElement.classList.add("btn-warning");
+        lastChosenIndex = answerIndex;
+
+        connection.invoke("SubmitAnswer", lobbyCode, playerName, currentQuestionId, answerIndex)
+            .catch(err => {
+                console.error("SubmitAnswer failed:", err);
+                // revert visual on failure
+                clearChosenVisual();
+                lastChosenIndex = null;
+            });
+    }
+
+    function clearChosenVisual() {
+        const btns = document.querySelectorAll(".answer-btn");
+        btns.forEach(b => {
+            b.classList.remove("btn-warning");
+            if (!b.classList.contains("btn-outline-primary")) {
+                b.classList.add("btn-outline-primary");
+            }
+        });
+    }
+
+    // Receive server-driven show (server payload minimal: { questionId, questionIndex?, answers?, currentQuestionText? })
+    connection.on("ShowQuestion", function(payload) {
+        if (!payload) return;
+        // If server supplies answers array use it for rendering (server ordering),
+        // otherwise fallback to using preloaded client snapshot.
+        const serverAnswers = payload.answers && payload.answers.length > 0 ? payload.answers : null;
+
+        // If server supplies index use it; otherwise find by id in preloaded list
+        if (payload.questionIndex !== undefined && payload.questionIndex !== null) {
+            renderQuestionByIndex(payload.questionIndex, serverAnswers);
+            currentQuestionId = payload.questionId || currentQuestionId;
+        } else if (payload.questionId) {
+            const idx = clientQuestions.findIndex(q => q.questionId == payload.questionId);
+            if (idx !== -1) {
+                renderQuestionByIndex(idx, serverAnswers);
+                currentQuestionId = payload.questionId;
+            } else {
+                renderQuestionByIndex(currentIndex, serverAnswers);
+            }
+        } else {
+            // Fallback: render currentIndex using serverAnswers if any
+            renderQuestionByIndex(currentIndex, serverAnswers);
+            currentQuestionId = payload.questionId || currentQuestionId;
+        }
+
+        // Update counts from server payload when available
+        if (payload.answeredCount !== undefined && payload.answeredCount !== null) {
+            lastAnsweredCount = payload.answeredCount;
+        }
+        if (payload.totalPlayers !== undefined && payload.totalPlayers !== null) {
+            lastTotalCount = payload.totalPlayers;
+        }
+        updateStatusWithCounts();
+    });
+
+    // Show results payload (colors & lists)
+    connection.on("ShowResults", function(payload) {
+        try {
+            // hide any scores panel while reviewing results
+            hideScoresPanel();
+            if (typeof showResults === "function") {
+                showResults(payload);
+            }
+        } catch (err) {
+            console.error("ShowResults handler error:", err);
+        }
+    });
+
+    // Compact overview payload (quizmaster convenience)
+    connection.on("ShowOverview", function(payload) {
+        try {
+            if (typeof showOverview === "function") {
+                showOverview(payload);
+            }
+        } catch (err) {
+            console.error("ShowOverview handler error:", err);
+        }
+    });
+
+    // Final scores
+    connection.on("ShowScores", function(payload) {
+        try {
+            showScores(payload);
+        } catch (err) {
+            console.error("ShowScores handler error:", err);
+        }
+    });
+
+    // Update counts when clients submit
+    connection.on("AnswersCountUpdated", function(answered, total) {
+        lastAnsweredCount = answered;
+        lastTotalCount = total;
+        updateStatusWithCounts();
+    });
+
+    // Optional: visual tick when a player answered
+    connection.on("PlayerAnswered", function(playerName) {
+        const status = document.getElementById("status");
+        const prev = status.textContent || "";
+        status.textContent = `${prev} — ${playerName} answered`;
+        // remove the "answered" note after a short timeout and restore counts
+        setTimeout(() => {
+            updateStatusWithCounts();
+        }, 2000);
+    });
+
+    connection.on("QuizFinished", function() {
+        // keep compatibility: if ShowScores was not followed, show a message
+        if (document.getElementById("scoresPanel").innerHTML.trim() === "") {
+            document.getElementById("status").textContent = "Quiz finished.";
+            document.getElementById("overviewPanel").innerHTML = "<div class='alert alert-info'>Quiz finished. Thank you for playing.</div>";
+        }
+    });
+
+    // Start connection and join lobby (keeps server aware; optional prompt name)
+    connection.start().then(async function() {
+        if (currentUserName) {
+            playerName = currentUserName;
+            await connection.invoke("JoinLobby", lobbyCode, playerName);
+        } else {
+            const name = prompt("Enter your name:");
+            if (name) {
+                playerName = name;
+                await connection.invoke("JoinLobby", lobbyCode, playerName);
+            }
+        }
+
+        // Show a waiting message until the server sends ShowQuestion.
+        // This prevents the "double-press" race where the quizmaster
+        // starts the quiz before clients have joined the group.
+        showWaitingForStart();
+    }).catch(function(err) {
+        console.error("SignalR start failed:", err);
+        // Fallback: render initial question so the page is usable offline
+        renderQuestionByIndex(currentIndex);
+    });
+</script>

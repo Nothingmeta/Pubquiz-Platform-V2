@@ -1,0 +1,34 @@
+﻿@{
+    ViewData["Title"] = "Inloggen";
+}
+<div class="container d-flex flex-column align-items-center logo">
+    <img src="../../images/PubquizPlatform.png" alt="Pubquiz Logo" width="200" />
+</div>
+
+<div class="auth-container">
+    <h2>Inloggen</h2>
+
+    <form method="post" class="auth-form">
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input id="email" type="text" name="Email" />
+        </div>
+
+        <div class="form-group">
+            <label for="password">Wachtwoord</label>
+            <input id="password" type="password" name="password" />
+        </div>
+
+        <button type="submit" class="btn-primary">Inloggen</button>
+    </form>
+
+    <p class="auth-link">
+        Heb je nog geen account?
+        <a href="/Auth/Register">Maak er hier één aan</a>.
+    </p>
+
+    @if (ViewBag.Error != null)
+    {
+        <p class="error-message">@ViewBag.Error</p>
+    }
+</div>
