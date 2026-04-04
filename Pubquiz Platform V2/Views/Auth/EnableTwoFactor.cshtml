@@ -4,28 +4,40 @@
     ViewData["Title"] = "Enable Two-Factor Authentication";
 }
 
-<h2>@ViewData["Title"]</h2>
+<div class="d-flex justify-content-center mt-5">
+    <div class="card p-4 shadow-sm" style="max-width:420px; width:100%;">
+        <div class="text-center mb-3">
+            <img src="~/images/PubquizPlatform.png" alt="Pubquiz Logo" width="150" class="mx-auto d-block" />
+        </div>
 
-<p>Scan the QR with your authenticator app (Google Authenticator, Authy, etc.) or enter the key manually.</p>
+        <h4 class="text-center mb-3">@ViewData["Title"]</h4>
 
-<div>
-    <img style="max-width:300px; max-height:300px;" src="@Model.QrCodeDataUri" alt="QR code for authenticator" />
-</div>
+        <p class="text-center mb-3">Scan the QR with your authenticator app (Google Authenticator, Authy, etc.) or enter the key manually.</p>
 
-<div>
-    <p><strong>Manual entry key:</strong> <code>@Model.ManualEntryKey</code></p>
-</div>
+        <div class="d-flex justify-content-center mb-3">
+            <img style="max-width:300px; max-height:300px;" src="@Model.QrCodeDataUri" alt="QR code for authenticator" />
+        </div>
 
-<form method="post" asp-action="EnableTwoFactor">
-    <div class="form-group">
-        <label for="code">Enter the verification code from your app</label>
-        <input class="form-control" id="code" name="code" />
+        <div class="mb-3">
+            <p class="mb-1"><strong>Manual entry key:</strong></p>
+            <p class="bg-light p-2 rounded"><code>@Model.ManualEntryKey</code></p>
+        </div>
+
+        <form method="post" asp-action="EnableTwoFactor" class="mb-0">
+            <div class="mb-3">
+                <label for="code" class="form-label">Enter the verification code from your app</label>
+                <input class="form-control" id="code" name="code" />
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1">Verify and Enable</button>
+                <a class="btn btn-outline-secondary" asp-action="Index" asp-controller="Home">Cancel</a>
+            </div>
+        </form>
+
+        @if (!string.IsNullOrEmpty(ViewBag.Error))
+        {
+            <div class="text-danger mt-3">@ViewBag.Error</div>
+        }
     </div>
-    <button type="submit" class="btn btn-primary">Verify and Enable</button>
-    <a class="btn btn-secondary" asp-action="Index" asp-controller="Home">Cancel</a>
-</form>
-
-@if (!string.IsNullOrEmpty(ViewBag.Error))
-{
-    <div class="text-danger">@ViewBag.Error</div>
-}
+</div>

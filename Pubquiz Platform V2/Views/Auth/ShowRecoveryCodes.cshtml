@@ -4,17 +4,25 @@
     ViewData["Title"] = "Recovery Codes";
 }
 
-<h2>@ViewData["Title"]</h2>
+<div class="d-flex justify-content-center mt-5">
+    <div class="card p-4 shadow-sm" style="max-width:420px; width:100%;">
+        <div class="text-center mb-3">
+            <img src="~/images/PubquizPlatform.png" alt="Pubquiz Logo" width="150" class="mx-auto d-block" />
+        </div>
 
-<p>Save these one-time recovery codes in a safe place. Each code can be used once to sign in if you lose access to your authenticator app.</p>
+        <h4 class="text-center mb-3">@ViewData["Title"]</h4>
 
-<ul>
-    @foreach (var code in Model)
-    {
-        <li><strong>@code</strong></li>
-    }
-</ul>
+        <p class="text-center">Save these one-time recovery codes in a safe place. Each code can be used once to sign in if you lose access to your authenticator app.</p>
 
-<p>
-    <a class="btn btn-primary" asp-controller="Home" asp-action="Index">Continue</a>
-</p>
+        <ul class="list-unstyled mt-3 mb-3">
+            @foreach (var code in Model)
+            {
+                <li class="mb-2"><span class="badge bg-secondary">@code</span></li>
+            }
+        </ul>
+
+        <div class="text-center">
+            <a class="btn btn-primary" asp-controller="Home" asp-action="Index">Continue</a>
+        </div>
+    </div>
+</div>

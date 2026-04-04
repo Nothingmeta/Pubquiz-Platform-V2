@@ -100,25 +100,15 @@ namespace PubquizPlatform.Controllers
             if (user.IsTwoFactorEnabled)
             {
                 TempData["2fa_userid"] = user.UserId.ToString();
-                // Preserve TempData for next request
                 TempData.Keep("2fa_userid");
                 return RedirectToAction(nameof(TwoFactor));
             }
 
-            // No 2FA: sign in immediately
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, user.Name),
-                new Claim(ClaimTypes.Role, user.Role),
-                new Claim("UserId", user.UserId.ToString())
-            };
-
-            var identity = new ClaimsIdentity(claims, "PubquizCookie");
-            var principal = new ClaimsPrincipal(identity);
-
-            await HttpContext.SignInAsync("PubquizCookie", principal);
-
-            return RedirectToAction("Index", "Home");
+            // If 2FA is NOT enabled, require the user to enable it now.
+            // Store pre-authenticated user id in TempData so EnableTwoFactor can use it.
+            TempData["preauth_userid"] = user.UserId.ToString();
+            TempData.Keep("preauth_userid");
+            return RedirectToAction(nameof(EnableTwoFactor));
         }
 
         [HttpGet]
@@ -232,8 +222,25 @@ namespace PubquizPlatform.Controllers
         [HttpGet]
         public IActionResult EnableTwoFactor()
         {
-            var userIdStr = User.FindFirst("UserId")?.Value;
-            if (userIdStr == null) return Forbid();
+            // Support two entry points:
+            //  - already signed in user (User claim present)
+            //  - pre-authenticated user coming from Login (TempData["preauth_userid"])
+            string? userIdStr = null;
+
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                userIdStr = User.FindFirst("UserId")?.Value;
+            }
+            else if (TempData.ContainsKey("preauth_userid"))
+            {
+                userIdStr = TempData["preauth_userid"]!.ToString();
+                // keep so POST can still read it
+                TempData.Keep("preauth_userid");
+            }
+            else
+            {
+                return Forbid();
+            }
 
             if (!int.TryParse(userIdStr, out var userId)) return Forbid();
 
@@ -268,11 +275,28 @@ namespace PubquizPlatform.Controllers
         }
 
         [HttpPost]
-        public IActionResult EnableTwoFactor(string code)
+        public async Task<IActionResult> EnableTwoFactor(string code)
         {
-            var userIdStr = User.FindFirst("UserId")?.Value;
-            if (userIdStr == null) return Forbid();
+            // Determine target user: either authenticated user or preauth via TempData
+            string? userIdStr = null;
+            bool cameFromPreauth = false;
+
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                userIdStr = User.FindFirst("UserId")?.Value;
+            }
+            else if (TempData.ContainsKey("preauth_userid"))
+            {
+                userIdStr = TempData["preauth_userid"]!.ToString();
+                cameFromPreauth = true;
+            }
+            else
+            {
+                return Forbid();
+            }
+
             if (!int.TryParse(userIdStr, out var userId)) return Forbid();
+
             var user = _context.Users.FirstOrDefault(u => u.UserId == userId);
             if (user == null) return Forbid();
 
@@ -292,6 +316,7 @@ namespace PubquizPlatform.Controllers
             {
                 ModelState.AddModelError("", "Invalid code. Scan again or re-enter code.");
                 TempData.Keep("2fa_temp_secret");
+                if (cameFromPreauth) TempData.Keep("preauth_userid");
                 return RedirectToAction(nameof(EnableTwoFactor));
             }
 
@@ -304,6 +329,12 @@ namespace PubquizPlatform.Controllers
             user.ProtectedRecoveryCodes = _protector.Protect(string.Join(",", recoveryCodes));
 
             _context.SaveChanges();
+
+            // If user came from login (preauth), sign them in now:
+            if (cameFromPreauth)
+            {
+                await SignInUser(user);
+            }
 
             // pass recovery codes to view via TempData so they are shown once
             TempData["recovery_codes"] = JsonSerializer.Serialize(recoveryCodes);
