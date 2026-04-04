@@ -1,0 +1,24 @@
+﻿@model Pubquiz_Platform_V2.ViewModels.TwoFactorVerifyViewModel
+
+@{
+    ViewData["Title"] = "Two-Factor Authentication";
+}
+
+<h2>@ViewData["Title"]</h2>
+
+<p>Enter the 6-digit code from your authenticator app or a recovery code.</p>
+
+<form method="post" asp-action="TwoFactor">
+    <div class="form-group">
+        <label asp-for="Code"></label>
+        <input asp-for="Code" class="form-control" />
+        <span asp-validation-for="Code" class="text-danger"></span>
+    </div>
+    <button type="submit" class="btn btn-primary">Verify</button>
+    <a class="btn btn-secondary" asp-action="Login">Cancel</a>
+</form>
+
+@if (!string.IsNullOrEmpty(ViewBag.Error))
+{
+    <div class="text-danger">@ViewBag.Error</div>
+}

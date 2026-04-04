@@ -35,6 +35,12 @@
                                 <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
                             </li>
                         </ul>
+                        <li class="nav-item">
+                            <a class="nav-link" href="@Url.Action("EnableTwoFactor", "Auth")">Enable Two‑Factor</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="@Url.Action("ShowRecoveryCodes", "Auth")">Show Recovery Codes</a>
+                        </li>
                     </div>
                 </div>
             </nav>

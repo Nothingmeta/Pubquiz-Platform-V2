@@ -1,0 +1,20 @@
+﻿@model List<string>
+
+@{
+    ViewData["Title"] = "Recovery Codes";
+}
+
+<h2>@ViewData["Title"]</h2>
+
+<p>Save these one-time recovery codes in a safe place. Each code can be used once to sign in if you lose access to your authenticator app.</p>
+
+<ul>
+    @foreach (var code in Model)
+    {
+        <li><strong>@code</strong></li>
+    }
+</ul>
+
+<p>
+    <a class="btn btn-primary" asp-controller="Home" asp-action="Index">Continue</a>
+</p>
