@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  pubquiz-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pubquiz-platform
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+      - DOTNET_RUNNING_IN_CONTAINER=true
+      - DOCKER_ENVIRONMENT=true
+    volumes:
+      - pubquiz-data:/app/data
+      - pubquiz-keys:/app/keys
+    depends_on:
+      - pubquiz-db-setup
+    restart: unless-stopped
+    networks:
+      - pubquiz-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+  pubquiz-db-setup:
+    image: alpine:latest
+    container_name: pubquiz-db-setup
+    volumes:
+      - pubquiz-data:/app/data
+      - pubquiz-keys:/app/keys
+    command: >
+      sh -c "
+      mkdir -p /app/keys /app/data &&
+      chmod 755 /app/keys /app/data &&
+      echo 'Directories created and permissions set'
+      "
+    networks:
+      - pubquiz-network
+
+volumes:
+  pubquiz-data:
+    driver: local
+  pubquiz-keys:
+    driver: local
+
+networks:
+  pubquiz-network:
+    driver: bridge

@@ -30,5 +30,12 @@ namespace Pubquiz_Platform_V2.Controllers
         {
             return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
         }
+
+        [HttpGet("/health")]
+        [AllowAnonymous]
+        public IActionResult Health()
+        {
+            return Ok("Healthy");
+        }
     }
 }

@@ -96,6 +96,27 @@ namespace PubquizPlatform.Controllers
                 return View();
             }
 
+            // IMPORTANT: Create authentication claims and sign in the user
+            // This ensures User.Identity.IsAuthenticated = true
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+                new Claim("UserId", user.UserId.ToString()),
+                new Claim(ClaimTypes.Email, user.Email),
+                new Claim(ClaimTypes.Name, user.Name),
+                new Claim("Role", user.Role)
+            };
+
+            var claimsIdentity = new ClaimsIdentity(claims, "PubquizCookie");
+            var principal = new ClaimsPrincipal(claimsIdentity);
+
+            // Sign in the user with the authentication cookie
+            await HttpContext.SignInAsync("PubquizCookie", principal, new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+            });
+
             // If user has 2FA enabled, redirect to code input
             if (user.IsTwoFactorEnabled)
             {
@@ -220,6 +241,7 @@ namespace PubquizPlatform.Controllers
         }
 
         [HttpGet]
+        [AllowAnonymous]
         public IActionResult EnableTwoFactor()
         {
             // Support two entry points:
@@ -275,6 +297,7 @@ namespace PubquizPlatform.Controllers
         }
 
         [HttpPost]
+        [AllowAnonymous]
         public async Task<IActionResult> EnableTwoFactor(string code)
         {
             // Determine target user: either authenticated user or preauth via TempData
@@ -343,6 +366,8 @@ namespace PubquizPlatform.Controllers
         }
 
         [HttpGet]
+        [AllowAnonymous]
+
         public IActionResult ShowRecoveryCodes()
         {
             if (!TempData.ContainsKey("recovery_codes"))
