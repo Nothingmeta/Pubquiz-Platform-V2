@@ -11,17 +11,17 @@ RUN dotnet publish "Pubquiz Platform V2.csproj" -c Release -o /app/publish /p:Us
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
-# Install curl for health checks
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
-# Copy published app
+# CRITICAL: Create data directory for SQLite database
+RUN mkdir -p /app/data && chmod 755 /app/data
+
 COPY --from=build /app/publish .
 
-EXPOSE 5000
+# Expose both 5000 and 8080 (Render uses 8080)
+EXPOSE 5000 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/health || exit 1
+    CMD curl -f http://localhost:8080/health || curl -f http://localhost:5000/health || exit 1
 
 ENTRYPOINT ["dotnet", "Pubquiz Platform V2.dll"]
