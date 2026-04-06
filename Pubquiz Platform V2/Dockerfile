@@ -13,15 +13,17 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
-# CRITICAL: Create data directory for SQLite database
-RUN mkdir -p /app/data && chmod 755 /app/data
-
 COPY --from=build /app/publish .
 
-# Expose both 5000 and 8080 (Render uses 8080)
-EXPOSE 5000 8080
+# CRITICAL: Create data directory with proper permissions for SQLite
+RUN mkdir -p /app/data && \
+    chmod 777 /app/data && \
+    touch /app/data/.gitkeep
+
+# Expose port (Render uses 8080 by default)
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || curl -f http://localhost:5000/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["dotnet", "Pubquiz Platform V2.dll"]

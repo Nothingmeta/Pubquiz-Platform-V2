@@ -161,8 +161,8 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
-// Configure port for Render (uses 8080) vs local (uses 5000)
-var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+// Configure port for Render (uses 8080 by default)
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 builder.WebHost.UseUrls($"http://+:{port}");
 
 Console.WriteLine($"ℹ Listening on port: {port}");
