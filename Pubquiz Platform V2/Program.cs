@@ -137,9 +137,6 @@ using (var scope = app.Services.CreateScope())
 // CRITICAL: Add session middleware BEFORE routing
 app.UseSession();
 
-app.UseAuthentication();
-app.UseAuthorization();
-
 app.MapHub<QuizLobbyHub>("/quizlobbyhub");
 
 // Configure the HTTP request pipeline.
@@ -152,6 +149,10 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseStaticFiles();
+
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.UseRouting();
 
