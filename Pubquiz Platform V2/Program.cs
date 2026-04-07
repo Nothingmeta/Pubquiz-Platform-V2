@@ -18,8 +18,6 @@ builder.Services.AddSignalR();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(x => x.UseSqlite(connectionString));
 var app = builder.Build();
-app.UseAuthentication(); // vóór app.UseAuthorization()
-app.UseAuthorization();
 
 app.MapHub<QuizLobbyHub>("/quizlobbyhub");
 
@@ -36,6 +34,7 @@ app.UseStaticFiles();
 
 app.UseRouting();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(
