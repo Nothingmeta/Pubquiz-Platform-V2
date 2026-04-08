@@ -4,32 +4,79 @@
     ViewData["Title"] = "Two-Factor Authentication";
 }
 
-<div class="d-flex justify-content-center mt-5">
-    <div class="card p-4 shadow-sm" style="max-width:420px; width:100%;">
-        <div class="text-center mb-3">
-            <img src="~/images/PubquizPlatform.png" alt="Pubquiz Logo" width="150" class="mx-auto d-block" />
+<div class="auth-container">
+    <h2>Two-Factor Authentication</h2>
+    <p>Enter the 6-digit code from your authenticator app:</p>
+
+    <div class="auth-form">
+        <div class="form-group">
+            <input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="000000" />
         </div>
-
-        <h4 class="text-center mb-3">@ViewData["Title"]</h4>
-
-        <p class="text-center mb-3">Enter the 6-digit code from your authenticator app or a recovery code.</p>
-
-        <form method="post" asp-action="TwoFactor" class="mb-0">
-            <div class="mb-3">
-                <label asp-for="Code" class="form-label"></label>
-                <input asp-for="Code" class="form-control" />
-                <span asp-validation-for="Code" class="text-danger"></span>
-            </div>
-
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary flex-grow-1">Verify</button>
-                <a class="btn btn-outline-secondary" asp-action="Login">Cancel</a>
-            </div>
-        </form>
-
-        @if (!string.IsNullOrEmpty(ViewBag.Error))
-        {
-            <div class="text-danger mt-3">@ViewBag.Error</div>
-        }
+        <button type="button" class="btn-primary" id="verifyBtn">Verify</button>
     </div>
+
+    <p id="errorMessage" class="error-message" style="display:none;"></p>
 </div>
+
+<script>
+    document.getElementById('verifyBtn').addEventListener('click', async function() {
+        const code = document.getElementById('code').value;
+        const preAuthToken = sessionStorage.getItem('preAuthToken');
+        const errorEl = document.getElementById('errorMessage');
+
+        if (!code || code.length !== 6) {
+            errorEl.textContent = 'Please enter a 6-digit code';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        if (!preAuthToken) {
+            window.location.href = '/Auth/Login';
+            return;
+        }
+
+        try {
+            const response = await fetch('/Auth/TwoFactor', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    code,
+                    preAuthToken 
+                })
+            });
+
+            const data = await response.json();
+
+            if (!data.success) {
+                errorEl.textContent = data.message;
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            // Store JWT and clear pre-auth token
+            localStorage.setItem('auth_token', data.accessToken);
+            document.cookie = `auth_token=${data.accessToken}; path=/; max-age=900; samesite=strict`;
+            
+            // Clear pre-auth
+            document.cookie = 'preAuthToken=; path=/; max-age=0';
+            sessionStorage.removeItem('preAuthToken');
+            sessionStorage.removeItem('userId');
+
+            window.location.href = '/Home/Index';
+
+        } catch (error) {
+            console.error('2FA error:', error);
+            errorEl.textContent = 'An error occurred';
+            errorEl.style.display = 'block';
+        }
+    });
+
+    // Auto-submit when 6 digits entered
+    document.getElementById('code').addEventListener('input', function(e) {
+        if (this.value.length === 6) {
+            document.getElementById('verifyBtn').click();
+        }
+    });
+</script>

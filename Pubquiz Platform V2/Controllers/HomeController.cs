@@ -5,7 +5,6 @@ using System.Diagnostics;
 
 namespace Pubquiz_Platform_V2.Controllers
 {
-    [Authorize]
     public class HomeController : Controller
     {
         private readonly ILogger<HomeController> _logger;

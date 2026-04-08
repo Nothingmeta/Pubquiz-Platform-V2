@@ -1,0 +1,16 @@
+services:
+  pubquiz:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - DATA_PROTECTION_PATH=/app/data-protection-keys
+      - DATA_PROTECTION_MASTER_KEY=BASE64_KEY_HERE  # Voeg je gegenereerde key hier in
+    volumes:
+      - data-protection-keys:/app/data-protection-keys
+      - db-data:/app/data
+
+volumes:
+  data-protection-keys:
+  db-data:

@@ -1,35 +1,37 @@
 ﻿using System.Text.Json;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.Identity; // Nodig voor PasswordHasher
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using OtpNet;
 using QRCoder;
 using Pubquiz_Platform.Data;
 using Pubquiz_Platform.Data.Entities;
 using Pubquiz_Platform_V2.ViewModels;
-using System.Security.Claims;
+using Pubquiz_Platform_V2.Services;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace PubquizPlatform.Controllers
 {
+    [Route("Auth/[action]")]  // ← This makes Auth/Login, Auth/Register, etc.
     public class AuthController : Controller
     {
         private readonly ApplicationDbContext _context;
         private readonly PasswordHasher<User> _passwordHasher = new PasswordHasher<User>();
         private readonly IDataProtector _protector;
+        private readonly IJwtTokenService _jwtTokenService;
 
-        // rate-limit parameters
         private const int MaxFailedTwoFactorAttempts = 5;
         private static readonly TimeSpan TwoFactorLockoutDuration = TimeSpan.FromMinutes(10);
 
-        public AuthController(ApplicationDbContext context, IDataProtectionProvider dataProtectionProvider)
+        public AuthController(
+            ApplicationDbContext context,
+            IDataProtectionProvider dataProtectionProvider,
+            IJwtTokenService jwtTokenService)
         {
             _context = context;
             _protector = dataProtectionProvider.CreateProtector("TwoFactorSecrets_v1");
+            _jwtTokenService = jwtTokenService;
         }
 
         [HttpGet]
@@ -51,9 +53,6 @@ namespace PubquizPlatform.Controllers
                 return View(model);
             }
 
-            // Geen truncatie of beperking op karakters nodig (Unicode toegestaan)
-
-            // Hash wachtwoord
             var user = new User
             {
                 Email = model.Email,
@@ -74,82 +73,109 @@ namespace PubquizPlatform.Controllers
 
         [HttpPost]
         [AllowAnonymous]
-        public async Task<IActionResult> Login(string email, string password)
+        public IActionResult Login([FromBody] LoginRequest request)  // ← Changed this line
         {
-            if (email == null || password == null)
+            if (string.IsNullOrEmpty(request?.Email) || string.IsNullOrEmpty(request?.Password))
             {
-                ViewBag.Error = "Email of Wachtwoord is niet ingevuld.";
-                return View();
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "Email of Wachtwoord is niet ingevuld."
+                });
             }
 
-            var user = _context.Users.FirstOrDefault(u => u.Email == email);
+            var user = _context.Users.FirstOrDefault(u => u.Email == request.Email);
             if (user == null)
             {
-                ViewBag.Error = "Ongeldige inloggegevens.";
-                return View();
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "Ongeldige inloggegevens."
+                });
             }
 
-            var result = _passwordHasher.VerifyHashedPassword(user, user.Password, password);
+            var result = _passwordHasher.VerifyHashedPassword(user, user.Password, request.Password);
             if (result == PasswordVerificationResult.Failed)
             {
-                ViewBag.Error = "Ongeldige inloggegevens.";
-                return View();
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "Ongeldige inloggegevens."
+                });
             }
 
-            // If user has 2FA enabled, redirect to code input
+            // If user has 2FA enabled, return pre-auth token
             if (user.IsTwoFactorEnabled)
             {
-                TempData["2fa_userid"] = user.UserId.ToString();
-                TempData.Keep("2fa_userid");
-                return RedirectToAction(nameof(TwoFactor));
+                var preAuthToken = _jwtTokenService.GeneratePreAuthToken(user.UserId);
+                return Json(new AuthResponseViewModel
+                {
+                    Success = true,
+                    Message = "2FA required",
+                    PreAuthToken = preAuthToken,
+                    UserId = user.UserId
+                });
             }
 
-            // If 2FA is NOT enabled, require the user to enable it now.
-            // Store pre-authenticated user id in TempData so EnableTwoFactor can use it.
-            TempData["preauth_userid"] = user.UserId.ToString();
-            TempData.Keep("preauth_userid");
-            return RedirectToAction(nameof(EnableTwoFactor));
+            // If 2FA not enabled, require user to enable it before full access
+            var setupToken = _jwtTokenService.GeneratePreAuthToken(user.UserId);
+            return Json(new AuthResponseViewModel
+            {
+                Success = true,
+                Message = "2FA setup required",
+                PreAuthToken = setupToken,
+                UserId = user.UserId
+            });
         }
 
         [HttpGet]
         [AllowAnonymous]
-        public IActionResult TwoFactor()
-        {
-            if (!TempData.ContainsKey("2fa_userid"))
-            {
-                return RedirectToAction("Login");
-            }
-
-            // keep for next POST
-            TempData.Keep("2fa_userid");
-            var vm = new TwoFactorVerifyViewModel();
-            return View(vm);
-        }
+        public IActionResult TwoFactor() => View();
 
         [HttpPost]
         [AllowAnonymous]
-        public async Task<IActionResult> TwoFactor(TwoFactorVerifyViewModel model)
+        public IActionResult TwoFactor([FromBody] TwoFactorVerifyViewModel model)
         {
-            if (!TempData.ContainsKey("2fa_userid"))
+            if (string.IsNullOrEmpty(model.PreAuthToken))
             {
-                return RedirectToAction("Login");
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "Pre-auth token missing"
+                });
             }
 
-            var idStr = TempData["2fa_userid"]!.ToString();
-            if (!int.TryParse(idStr, out var userId)) return RedirectToAction("Login");
+            var (isValid, userId) = _jwtTokenService.ValidatePreAuthToken(model.PreAuthToken);
+            if (!isValid)
+            {
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "Invalid or expired pre-auth token"
+                });
+            }
 
             var user = _context.Users.FirstOrDefault(u => u.UserId == userId);
-            if (user == null) return RedirectToAction("Login");
+            if (user == null)
+            {
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
+            }
 
             // Check lockout
             if (user.TwoFactorLockoutEnd.HasValue && user.TwoFactorLockoutEnd.Value > DateTimeOffset.UtcNow)
             {
-                ViewBag.Error = $"Account locked. Try again at {user.TwoFactorLockoutEnd.Value:u}.";
-                TempData.Keep("2fa_userid");
-                return View(model);
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = $"Account locked. Try again at {user.TwoFactorLockoutEnd.Value:u}."
+                });
             }
 
-            // First try TOTP if secret exists
+            // Verify TOTP
             if (!string.IsNullOrEmpty(user.ProtectedTwoFactorSecret))
             {
                 try
@@ -158,26 +184,27 @@ namespace PubquizPlatform.Controllers
                     var bytes = Base32Encoding.ToBytes(secret);
                     var totp = new Totp(bytes);
                     var sanitized = (model.Code ?? string.Empty).Replace(" ", "").Replace("-", "");
-                    bool isValid = totp.VerifyTotp(sanitized, out long timeStepMatched, new VerificationWindow(2, 2));
+                    bool totpValid = totp.VerifyTotp(sanitized, out _, new VerificationWindow(2, 2));
 
-                    if (isValid)
+                    if (totpValid)
                     {
-                        // success -> reset counters and sign in
                         user.TwoFactorFailedCount = 0;
                         user.TwoFactorLockoutEnd = null;
                         _context.SaveChanges();
 
-                        await SignInUser(user);
-                        return RedirectToAction("Index", "Home");
+                        var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email, user.Name, user.Role);
+                        return Json(new AuthResponseViewModel
+                        {
+                            Success = true,
+                            Message = "Login successful",
+                            AccessToken = accessToken
+                        });
                     }
                 }
-                catch
-                {
-                    // fallthrough to recovery code check
-                }
+                catch { }
             }
 
-            // Recovery codes check (one-time use)
+            // Verify Recovery Code
             if (!string.IsNullOrEmpty(user.ProtectedRecoveryCodes))
             {
                 try
@@ -186,66 +213,73 @@ namespace PubquizPlatform.Controllers
                     var codes = recovered.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
                     var sanitized = (model.Code ?? string.Empty).Replace(" ", "").Replace("-", "");
                     var matched = codes.FirstOrDefault(c => string.Equals(c, sanitized, StringComparison.OrdinalIgnoreCase));
+
                     if (matched != null)
                     {
-                        // consume code
                         codes.Remove(matched);
                         user.ProtectedRecoveryCodes = codes.Any() ? _protector.Protect(string.Join(",", codes)) : null;
                         user.TwoFactorFailedCount = 0;
                         user.TwoFactorLockoutEnd = null;
                         _context.SaveChanges();
 
-                        await SignInUser(user);
-                        return RedirectToAction("Index", "Home");
+                        var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email, user.Name, user.Role);
+                        return Json(new AuthResponseViewModel
+                        {
+                            Success = true,
+                            Message = "Login successful",
+                            AccessToken = accessToken
+                        });
                     }
                 }
-                catch
-                {
-                    // ignore and treat as failed
-                }
+                catch { }
             }
 
-            // failed attempt -> increment and maybe lockout
+            // Failed attempt
             user.TwoFactorFailedCount++;
             if (user.TwoFactorFailedCount >= MaxFailedTwoFactorAttempts)
             {
                 user.TwoFactorLockoutEnd = DateTimeOffset.UtcNow.Add(TwoFactorLockoutDuration);
-                user.TwoFactorFailedCount = 0; // reset counter after lockout
+                user.TwoFactorFailedCount = 0;
             }
             _context.SaveChanges();
 
-            ViewBag.Error = "Invalid code.";
-            TempData.Keep("2fa_userid");
-            return View(model);
+            return Json(new AuthResponseViewModel
+            {
+                Success = false,
+                Message = "Invalid code."
+            });
         }
 
         [HttpGet]
         public IActionResult EnableTwoFactor()
         {
-            // Support two entry points:
-            //  - already signed in user (User claim present)
-            //  - pre-authenticated user coming from Login (TempData["preauth_userid"])
-            string? userIdStr = null;
+            string? userIdStr = User?.FindFirst("UserId")?.Value;
+            
+            // If not authenticated, check for pre-auth token from cookie
+            if (string.IsNullOrEmpty(userIdStr))
+            {
+                // Check if user has pre-auth token in cookie
+                if (!Request.Cookies.TryGetValue("preAuthToken", out var preAuthToken))
+                {
+                    return Forbid();
+                }
 
-            if (User?.Identity?.IsAuthenticated == true)
-            {
-                userIdStr = User.FindFirst("UserId")?.Value;
+                // Validate the pre-auth token
+                var (isValid, userId) = _jwtTokenService.ValidatePreAuthToken(preAuthToken);
+                if (!isValid)
+                {
+                    return Forbid();
+                }
+
+                userIdStr = userId.ToString();
             }
-            else if (TempData.ContainsKey("preauth_userid"))
-            {
-                userIdStr = TempData["preauth_userid"]!.ToString();
-                // keep so POST can still read it
-                TempData.Keep("preauth_userid");
-            }
-            else
-            {
+
+            if (!int.TryParse(userIdStr, out var parsedUserId)) 
                 return Forbid();
-            }
 
-            if (!int.TryParse(userIdStr, out var userId)) return Forbid();
-
-            var user = _context.Users.FirstOrDefault(u => u.UserId == userId);
-            if (user == null) return Forbid();
+            var user = _context.Users.FirstOrDefault(u => u.UserId == parsedUserId);
+            if (user == null) 
+                return Forbid();
 
             // Generate secret and QR
             var secretBytes = KeyGeneration.GenerateRandomKey(20);
@@ -264,110 +298,117 @@ namespace PubquizPlatform.Controllers
             var vm = new EnableTwoFactorViewModel
             {
                 QrCodeDataUri = dataUri,
-                ManualEntryKey = secretBase32
+                ManualEntryKey = secretBase32,
+                TempSecret = secretBase32
             };
-
-            // Temporarily store the plain secret in TempData for verification on POST
-            TempData["2fa_temp_secret"] = secretBase32;
-            TempData.Keep("2fa_temp_secret");
 
             return View(vm);
         }
 
         [HttpPost]
-        public async Task<IActionResult> EnableTwoFactor(string code)
+        [AllowAnonymous]
+        public IActionResult EnableTwoFactor([FromBody] TwoFactorSetupViewModel model)
         {
-            // Determine target user: either authenticated user or preauth via TempData
-            string? userIdStr = null;
-            bool cameFromPreauth = false;
+            string? userIdStr = User?.FindFirst("UserId")?.Value;
+            int userId = 0;
+            
+            // If not authenticated, check for pre-auth token
+            if (string.IsNullOrEmpty(userIdStr))
+            {
+                if (!Request.Cookies.TryGetValue("preAuthToken", out var preAuthToken))
+                {
+                    return Json(new AuthResponseViewModel
+                    {
+                        Success = false,
+                        Message = "Pre-auth token missing"
+                    });
+                }
 
-            if (User?.Identity?.IsAuthenticated == true)
-            {
-                userIdStr = User.FindFirst("UserId")?.Value;
-            }
-            else if (TempData.ContainsKey("preauth_userid"))
-            {
-                userIdStr = TempData["preauth_userid"]!.ToString();
-                cameFromPreauth = true;
+                var (isValid, parsedUserId) = _jwtTokenService.ValidatePreAuthToken(preAuthToken);
+                if (!isValid)
+                {
+                    return Json(new AuthResponseViewModel
+                    {
+                        Success = false,
+                        Message = "Invalid pre-auth token"
+                    });
+                }
+
+                userId = parsedUserId;
+                userIdStr = userId.ToString();
             }
             else
             {
-                return Forbid();
+                if (!int.TryParse(userIdStr, out userId))
+                {
+                    return Json(new AuthResponseViewModel
+                    {
+                        Success = false,
+                        Message = "Invalid user ID"
+                    });
+                }
             }
-
-            if (!int.TryParse(userIdStr, out var userId)) return Forbid();
 
             var user = _context.Users.FirstOrDefault(u => u.UserId == userId);
-            if (user == null) return Forbid();
-
-            if (!TempData.ContainsKey("2fa_temp_secret"))
+            if (user == null)
             {
-                ModelState.AddModelError("", "Setup session expired. Start again.");
-                return RedirectToAction(nameof(EnableTwoFactor));
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
             }
 
-            var secret = TempData["2fa_temp_secret"]!.ToString()!;
-            var bytes = Base32Encoding.ToBytes(secret);
+            if (string.IsNullOrEmpty(model.Secret))
+            {
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "Secret not provided"
+                });
+            }
+
+            var bytes = Base32Encoding.ToBytes(model.Secret);
             var totp = new Totp(bytes);
-            var sanitized = (code ?? string.Empty).Replace(" ", "").Replace("-", "");
-            bool isValid = totp.VerifyTotp(sanitized, out long _, new VerificationWindow(2, 2));
+            var sanitized = (model.Code ?? string.Empty).Replace(" ", "").Replace("-", "");
+            bool totpValid = totp.VerifyTotp(sanitized, out _, new VerificationWindow(2, 2));  // ← Changed to totpValid
 
-            if (!isValid)
+            if (!totpValid)  // ← Changed to totpValid
             {
-                ModelState.AddModelError("", "Invalid code. Scan again or re-enter code.");
-                TempData.Keep("2fa_temp_secret");
-                if (cameFromPreauth) TempData.Keep("preauth_userid");
-                return RedirectToAction(nameof(EnableTwoFactor));
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "Invalid code"
+                });
             }
 
-            // Protect and store secret
-            user.ProtectedTwoFactorSecret = _protector.Protect(secret);
+            user.ProtectedTwoFactorSecret = _protector.Protect(model.Secret);
             user.IsTwoFactorEnabled = true;
 
-            // Generate recovery codes (one-time display)
             var recoveryCodes = GenerateRecoveryCodes(8);
             user.ProtectedRecoveryCodes = _protector.Protect(string.Join(",", recoveryCodes));
 
             _context.SaveChanges();
 
-            // If user came from login (preauth), sign them in now:
-            if (cameFromPreauth)
+            // Generate full access token now that 2FA is set up
+            var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email, user.Name, user.Role);
+
+            return Json(new TwoFactorResponseViewModel
             {
-                await SignInUser(user);
-            }
-
-            // pass recovery codes to view via TempData so they are shown once
-            TempData["recovery_codes"] = JsonSerializer.Serialize(recoveryCodes);
-
-            return RedirectToAction(nameof(ShowRecoveryCodes));
+                Success = true,
+                Message = "2FA enabled successfully",
+                AccessToken = accessToken,
+                RecoveryCodes = recoveryCodes
+            });
         }
 
-        [HttpGet]
-        public IActionResult ShowRecoveryCodes()
+        [HttpPost]
+        [Authorize]
+        public IActionResult Logout()
         {
-            if (!TempData.ContainsKey("recovery_codes"))
-            {
-                return RedirectToAction("Index", "Home");
-            }
-
-            var serialized = TempData["recovery_codes"]!.ToString();
-            var codes = JsonSerializer.Deserialize<List<string>>(serialized!) ?? new List<string>();
-            return View(codes);
-        }
-
-        private async Task SignInUser(User user)
-        {
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, user.Name),
-                new Claim(ClaimTypes.Role, user.Role),
-                new Claim("UserId", user.UserId.ToString())
-            };
-
-            var identity = new ClaimsIdentity(claims, "PubquizCookie");
-            var principal = new ClaimsPrincipal(identity);
-
-            await HttpContext.SignInAsync("PubquizCookie", principal);
+            Response.Cookies.Delete("auth_token");
+            Response.Cookies.Delete("preAuthToken");
+            return RedirectToAction("Login");
         }
 
         private static List<string> GenerateRecoveryCodes(int count)
@@ -382,21 +423,12 @@ namespace PubquizPlatform.Controllers
 
         private static string GenerateSingleRecoveryCode()
         {
-            // produce a short human-friendly code like "4F7G-9K2P"
             Span<byte> bytes = stackalloc byte[6];
             RandomNumberGenerator.Fill(bytes);
-            // base32-ish text: use hex but uppercase and insert dash
             var s = Convert.ToBase64String(bytes).Replace('+', 'A').Replace('/', 'B').Replace("=", string.Empty);
             s = new string(s.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
             if (s.Length < 8) s = s.PadRight(8, 'X');
             return s.Substring(0, 4) + "-" + s.Substring(4, 4);
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> Logout()
-        {
-            await HttpContext.SignOutAsync("PubquizCookie");
-            return RedirectToAction("Login");
         }
     }
 }

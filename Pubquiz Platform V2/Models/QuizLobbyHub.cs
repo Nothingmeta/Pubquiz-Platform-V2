@@ -1,14 +1,18 @@
-﻿using Microsoft.AspNetCore.SignalR;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Pubquiz_Platform.Data;
 using Pubquiz_Platform.Data.Entities;
 using System.Collections.Concurrent;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace Pubquiz_Platform_V2.Models
 {
+    [Authorize]
     public class QuizLobbyHub : Hub
     {
         private readonly ApplicationDbContext _context;
+        private readonly ILogger<QuizLobbyHub> _logger;
 
         // Thread-safe dictionary for lobby players
         private static readonly ConcurrentDictionary<string, HashSet<string>> LobbyPlayers = new();
@@ -16,13 +20,31 @@ namespace Pubquiz_Platform_V2.Models
         // Per-lobby quiz runtime state
         private static readonly ConcurrentDictionary<string, LobbyState> LobbyStates = new();
 
-        public QuizLobbyHub(ApplicationDbContext context)
+        public QuizLobbyHub(ApplicationDbContext context, ILogger<QuizLobbyHub> logger)
         {
             _context = context;
+            _logger = logger;
+        }
+
+        public override Task OnConnectedAsync()
+        {
+            var userId = Context.User?.FindFirst("UserId")?.Value;
+            var userName = Context.User?.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+            
+            _logger.LogInformation($"User {userId} ({userName}) connected to QuizLobbyHub");
+            return base.OnConnectedAsync();
         }
 
         public async Task JoinLobby(string lobbyCode, string playerName)
         {
+            // Verify the user is authenticated and the name matches their user claim
+            var userId = Context.User?.FindFirst("UserId")?.Value;
+            if (string.IsNullOrEmpty(userId))
+            {
+                await Clients.Caller.SendAsync("Error", "Not authenticated");
+                return;
+            }
+
             var players = LobbyPlayers.GetOrAdd(lobbyCode, _ => new HashSet<string>());
             lock (players)
             {
@@ -48,36 +70,14 @@ namespace Pubquiz_Platform_V2.Models
 
         public async Task LeaveLobby(string lobbyCode, string playerName)
         {
-            if (LobbyPlayers.TryGetValue(lobbyCode, out var players))
+            var players = LobbyPlayers.GetOrAdd(lobbyCode, _ => new HashSet<string>());
+            lock (players)
             {
-                lock (players)
-                {
-                    players.Remove(playerName);
-                }
-                await Clients.Group(lobbyCode).SendAsync("PlayerListUpdated", players.ToList());
+                players.Remove(playerName);
             }
 
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, lobbyCode);
-
-            var lobby = await _context.Lobbies
-                .Include(l => l.Quiz)
-                    .ThenInclude(q => q.QuizMaster)
-                .FirstOrDefaultAsync(l => l.LobbyCode == lobbyCode);
-
-            if (lobby != null && lobby.Quiz?.QuizMaster != null)
-            {
-                if (lobby.Quiz.QuizMaster.Name == playerName)
-                {
-                    lobby.IsActive = false;
-                    await _context.SaveChangesAsync();
-
-                    // Notify all players to leave the lobby
-                    await Clients.Group(lobbyCode).SendAsync("LobbyClosed");
-
-                    // cleanup runtime state
-                    LobbyStates.TryRemove(lobbyCode, out _);
-                }
-            }
+            await Clients.Group(lobbyCode).SendAsync("PlayerListUpdated", players.ToList());
         }
 
         // Start quiz: only the quizmaster may start
