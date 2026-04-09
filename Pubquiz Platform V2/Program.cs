@@ -80,14 +80,42 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllersWithViews();
 builder.Services.AddSignalR();
 
-// Register JWT Service
+// Register JWT Services
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 
+// Configure Database - Support both SQLite and PostgreSQL
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<ApplicationDbContext>(x => x.UseSqlite(connectionString));
+
+if (builder.Environment.IsDevelopment())
+{
+    // Use SQLite in development
+    builder.Services.AddDbContext<ApplicationDbContext>(x => 
+        x.UseSqlite(connectionString ?? "Data Source=Pubquiz.sqlite"));
+}
+else
+{
+    // Use PostgreSQL in production/docker
+    builder.Services.AddDbContext<ApplicationDbContext>(x => 
+        x.UseNpgsql(connectionString));
+}
 
 var app = builder.Build();
+
+// Auto-migrate database on startup
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        dbContext.Database.Migrate();
+        Console.WriteLine("Database migration completed successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Database migration failed: {ex.Message}");
+    }
+}
 
 // Enable detailed error messages in development
 if (app.Environment.IsDevelopment())
@@ -98,7 +126,7 @@ else
 {
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
-    app.UseHttpsRedirection();  // ← MOVE THIS HERE (production only)
+    app.UseHttpsRedirection();  // Production only
     app.UseForwardedHeaders();
 }
 

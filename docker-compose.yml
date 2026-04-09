@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: pubquiz-db
+    environment:
+      POSTGRES_USER: pubquiz_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ChangeThisPassword123!}
+      POSTGRES_DB: pubquiz_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pubquiz_user -d pubquiz_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pubquiz-network
+
+  # ASP.NET Core Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pubquiz-app
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=pubquiz_db;Username=pubquiz_user;Password=${DB_PASSWORD:-ChangeThisPassword123!};Include Error Detail=true"
+      Jwt__SecretKey: ${JWT_SECRET_KEY:-6HKkehGg5QZ17Qqo62xxc9PXkCAl7pO8xQLSR3AAb/oxNBkxxGK1w/G1VIvHFK3hfXVVwU7me6wg+p0qi3aq9Q==}
+      Jwt__Issuer: ${JWT_ISSUER:-PubquizPlatform}
+      Jwt__Audience: ${JWT_AUDIENCE:-PubquizClients}
+      Jwt__AccessTokenExpirationMinutes: ${JWT_ACCESS_TOKEN_EXPIRATION:-15}
+      Jwt__RefreshTokenExpirationDays: ${JWT_REFRESH_TOKEN_EXPIRATION:-7}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - pubquiz-network
+    restart: unless-stopped
+
+networks:
+  pubquiz-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
