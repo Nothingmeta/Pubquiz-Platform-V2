@@ -21,6 +21,7 @@ namespace PubquizTests
         private ApplicationDbContext? _context;
         private AuthController? _controller;
         private IJwtTokenService? _jwtTokenService;
+        private IRefreshTokenService? _refreshTokenService;
         private IConfiguration? _configuration;
         private IDisposable? _serviceProvider;
 
@@ -39,7 +40,8 @@ namespace PubquizTests
                 { "Jwt:SecretKey", "test-secret-key-at-least-32-characters-long-for-256-bit" },
                 { "Jwt:Issuer", "TestIssuer" },
                 { "Jwt:Audience", "TestAudience" },
-                { "Jwt:AccessTokenExpirationMinutes", "15" }
+                { "Jwt:AccessTokenExpirationMinutes", "15" },
+                { "Jwt:RefreshTokenExpirationDays", "7" }
             };
 
             _configuration = new ConfigurationBuilder()
@@ -47,9 +49,11 @@ namespace PubquizTests
                 .Build();
 
             var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-            var logger = loggerFactory.CreateLogger<JwtTokenService>();
+            var jwtLogger = loggerFactory.CreateLogger<JwtTokenService>();
+            var refreshLogger = loggerFactory.CreateLogger<RefreshTokenService>();
 
-            _jwtTokenService = new JwtTokenService(_configuration, logger);
+            _jwtTokenService = new JwtTokenService(_configuration, jwtLogger);
+            _refreshTokenService = new RefreshTokenService(_context, _configuration, refreshLogger);
 
             // Create controller
             var services = new ServiceCollection();
@@ -57,7 +61,7 @@ namespace PubquizTests
             _serviceProvider = services.BuildServiceProvider();
             var provider = ((IServiceProvider)_serviceProvider).GetRequiredService<IDataProtectionProvider>();
 
-            _controller = new AuthController(_context, provider, _jwtTokenService);
+            _controller = new AuthController(_context, provider, _jwtTokenService, _refreshTokenService, _configuration);
             _controller.ControllerContext = new ControllerContext()
             {
                 HttpContext = new DefaultHttpContext()
@@ -122,7 +126,7 @@ namespace PubquizTests
         }
 
         [Test]
-        public void Login_WithValidCredentials_ReturnsJsonWithAccessToken()
+        public void Login_WithValidCredentials_ReturnsJsonWith2FARequired()
         {
             // Arrange
             var user = new User 
@@ -137,15 +141,22 @@ namespace PubquizTests
             _context!.Users.Add(user);
             _context.SaveChanges();
 
+            var request = new LoginRequest 
+            { 
+                Email = "test@example.com", 
+                Password = "password123" 
+            };
+
             // Act
-            var result = _controller!.Login("test@example.com", "password123");
+            var result = _controller!.Login(request);
 
             // Assert
             Assert.That(result, Is.InstanceOf<JsonResult>());
             var jsonResult = (JsonResult)result;
             var response = jsonResult.Value as AuthResponseViewModel;
             Assert.That(response?.Success, Is.True);
-            Assert.That(response?.AccessToken, Is.Not.Null.And.Not.Empty);
+            Assert.That(response?.PreAuthToken, Is.Not.Null.And.Not.Empty);
+            Assert.That(response?.Message, Is.EqualTo("2FA setup required"));
         }
 
         [Test]
@@ -163,8 +174,14 @@ namespace PubquizTests
             _context!.Users.Add(user);
             _context.SaveChanges();
 
+            var request = new LoginRequest 
+            { 
+                Email = "test@example.com", 
+                Password = "wrongpassword" 
+            };
+
             // Act
-            var result = _controller!.Login("test@example.com", "wrongpassword");
+            var result = _controller!.Login(request);
 
             // Assert
             Assert.That(result, Is.InstanceOf<JsonResult>());
@@ -189,13 +206,81 @@ namespace PubquizTests
             _context!.Users.Add(user);
             _context.SaveChanges();
 
+            var request = new LoginRequest 
+            { 
+                Email = "test@example.com", 
+                Password = "password123" 
+            };
+
             // Act
-            var result = _controller!.Login("test@example.com", "password123");
+            var result = _controller!.Login(request);
 
             // Assert
             var response = ((JsonResult)result).Value as AuthResponseViewModel;
             Assert.That(response?.PreAuthToken, Is.Not.Null.And.Not.Empty);
             Assert.That(response?.Success, Is.True);
+            Assert.That(response?.Message, Is.EqualTo("2FA required"));
+        }
+
+        [Test]
+        public void RefreshToken_WithValidRefreshToken_ReturnsNewAccessToken()
+        {
+            // Arrange
+            var user = new User 
+            { 
+                Email = "test@example.com", 
+                Name = "Test", 
+                Role = "player",
+                RefreshToken = "valid-refresh-token",
+                RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7)
+            };
+            _context!.Users.Add(user);
+            _context.SaveChanges();
+
+            var request = new RefreshTokenRequest 
+            { 
+                RefreshToken = "valid-refresh-token" 
+            };
+
+            // Act
+            var result = _controller!.RefreshToken(request);
+
+            // Assert
+            Assert.That(result, Is.InstanceOf<JsonResult>());
+            var jsonResult = (JsonResult)result;
+            var response = jsonResult.Value as AuthResponseViewModel;
+            Assert.That(response?.Success, Is.True);
+            Assert.That(response?.AccessToken, Is.Not.Null.And.Not.Empty);
+            Assert.That(response?.RefreshToken, Is.Not.Null.And.Not.Empty);
+        }
+
+        [Test]
+        public void RefreshToken_WithExpiredToken_ReturnsFalse()
+        {
+            // Arrange
+            var user = new User 
+            { 
+                Email = "test@example.com", 
+                Name = "Test", 
+                Role = "player",
+                RefreshToken = "expired-refresh-token",
+                RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(-1)
+            };
+            _context!.Users.Add(user);
+            _context.SaveChanges();
+
+            var request = new RefreshTokenRequest 
+            { 
+                RefreshToken = "expired-refresh-token" 
+            };
+
+            // Act
+            var result = _controller!.RefreshToken(request);
+
+            // Assert
+            Assert.That(result, Is.InstanceOf<JsonResult>());
+            var response = ((JsonResult)result).Value as AuthResponseViewModel;
+            Assert.That(response?.Success, Is.False);
         }
     }
 }

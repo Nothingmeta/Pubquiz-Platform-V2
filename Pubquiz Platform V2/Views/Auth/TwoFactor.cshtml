@@ -55,9 +55,11 @@
                 return;
             }
 
-            // Store JWT and clear pre-auth token
+            // Store JWT and refresh token
             localStorage.setItem('auth_token', data.accessToken);
+            localStorage.setItem('refresh_token', data.refreshToken);
             document.cookie = `auth_token=${data.accessToken}; path=/; max-age=900; samesite=strict`;
+            document.cookie = `refresh_token=${data.refreshToken}; path=/; max-age=604800; samesite=strict`;
             
             // Clear pre-auth
             document.cookie = 'preAuthToken=; path=/; max-age=0';

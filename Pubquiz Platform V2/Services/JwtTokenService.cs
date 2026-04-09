@@ -105,12 +105,12 @@ namespace Pubquiz_Platform_V2.Services
             if (principal == null)
                 return (false, 0);
 
-            var tokenTypeClaim = principal.FindFirst("TokenType");
+            var tokenTypeClaim = principal.Claims.FirstOrDefault(c => c.Type == "TokenType");
             if (tokenTypeClaim?.Value != "PreAuth")
                 return (false, 0);
 
-            var userIdClaim = principal.FindFirst("UserId");
-            if (!int.TryParse(userIdClaim?.Value, out var userId))
+            var userIdClaim = principal.Claims.FirstOrDefault(c => c.Type == "UserId");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
                 return (false, 0);
 
             return (true, userId);

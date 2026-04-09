@@ -5,6 +5,7 @@ namespace Pubquiz_Platform_V2.ViewModels
         public bool Success { get; set; }
         public string Message { get; set; }
         public string AccessToken { get; set; }
+        public string RefreshToken { get; set; }
         public string PreAuthToken { get; set; }
         public int UserId { get; set; }
     }

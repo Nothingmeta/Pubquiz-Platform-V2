@@ -21,6 +21,10 @@
         public int TwoFactorFailedCount { get; set; } = 0;
         public DateTimeOffset? TwoFactorLockoutEnd { get; set; }
 
+        // Refresh token fields
+        public string? RefreshToken { get; set; }
+        public DateTime? RefreshTokenExpiryTime { get; set; }
+
         // Navigatie
         public ICollection<Quiz> Quizzes { get; set; }
     }

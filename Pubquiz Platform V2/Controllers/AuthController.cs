@@ -13,6 +13,7 @@ using System.Security.Cryptography;
 
 namespace PubquizPlatform.Controllers
 {
+    [Authorize]
     [Route("Auth/[action]")]  // ← This makes Auth/Login, Auth/Register, etc.
     public class AuthController : Controller
     {
@@ -20,6 +21,8 @@ namespace PubquizPlatform.Controllers
         private readonly PasswordHasher<User> _passwordHasher = new PasswordHasher<User>();
         private readonly IDataProtector _protector;
         private readonly IJwtTokenService _jwtTokenService;
+        private readonly IRefreshTokenService _refreshTokenService;
+        private readonly IConfiguration _configuration;
 
         private const int MaxFailedTwoFactorAttempts = 5;
         private static readonly TimeSpan TwoFactorLockoutDuration = TimeSpan.FromMinutes(10);
@@ -27,11 +30,15 @@ namespace PubquizPlatform.Controllers
         public AuthController(
             ApplicationDbContext context,
             IDataProtectionProvider dataProtectionProvider,
-            IJwtTokenService jwtTokenService)
+            IJwtTokenService jwtTokenService,
+            IRefreshTokenService refreshTokenService,
+            IConfiguration configuration)
         {
             _context = context;
             _protector = dataProtectionProvider.CreateProtector("TwoFactorSecrets_v1");
             _jwtTokenService = jwtTokenService;
+            _refreshTokenService = refreshTokenService;
+            _configuration = configuration;
         }
 
         [HttpGet]
@@ -250,6 +257,7 @@ namespace PubquizPlatform.Controllers
             });
         }
 
+        [AllowAnonymous]
         [HttpGet]
         public IActionResult EnableTwoFactor()
         {
@@ -403,11 +411,69 @@ namespace PubquizPlatform.Controllers
         }
 
         [HttpPost]
+        [AllowAnonymous]
+        public IActionResult RefreshToken([FromBody] RefreshTokenRequest request)
+        {
+            if (string.IsNullOrEmpty(request?.RefreshToken))
+            {
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "Refresh token is required"
+                });
+            }
+
+            var (isValid, userId) = _refreshTokenService.ValidateRefreshToken(request.RefreshToken);
+            if (!isValid)
+            {
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "Invalid or expired refresh token"
+                });
+            }
+
+            var user = _context.Users.FirstOrDefault(u => u.UserId == userId);
+            if (user == null)
+            {
+                return Json(new AuthResponseViewModel
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
+            }
+
+            // Generate new access token
+            var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Email, user.Name, user.Role);
+            
+            // Optionally generate new refresh token
+            var newRefreshToken = _refreshTokenService.GenerateRefreshToken();
+            var refreshTokenExpiryTime = DateTime.UtcNow.AddDays(int.Parse(_configuration["Jwt:RefreshTokenExpirationDays"] ?? "7"));
+            _refreshTokenService.SaveRefreshToken(user.UserId, newRefreshToken, refreshTokenExpiryTime);
+
+            return Json(new AuthResponseViewModel
+            {
+                Success = true,
+                Message = "Token refreshed successfully",
+                AccessToken = accessToken,
+                RefreshToken = newRefreshToken
+            });
+        }
+
+        [HttpPost]
         [Authorize]
         public IActionResult Logout()
         {
+            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId");
+            if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int userId))
+            {
+                _refreshTokenService.RevokeRefreshToken(userId);
+            }
+
             Response.Cookies.Delete("auth_token");
+            Response.Cookies.Delete("refresh_token");
             Response.Cookies.Delete("preAuthToken");
+
             return RedirectToAction("Login");
         }
 

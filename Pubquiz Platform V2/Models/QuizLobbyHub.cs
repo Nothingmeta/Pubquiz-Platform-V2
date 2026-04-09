@@ -68,7 +68,7 @@ namespace Pubquiz_Platform_V2.Models
             }
         }
 
-        public async Task LeaveLobby(string lobbyCode, string playerName)
+        public async Task LeaveLobby(string lobbyCode, string playerName, bool isQuizMaster = false)
         {
             var players = LobbyPlayers.GetOrAdd(lobbyCode, _ => new HashSet<string>());
             lock (players)
@@ -77,7 +77,35 @@ namespace Pubquiz_Platform_V2.Models
             }
 
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, lobbyCode);
-            await Clients.Group(lobbyCode).SendAsync("PlayerListUpdated", players.ToList());
+            
+            // Only close the lobby if the quizmaster leaves
+            if (isQuizMaster)
+            {
+                // Clear lobby state when quizmaster leaves
+                LobbyStates.TryRemove(lobbyCode, out _);
+                
+                // Mark lobby as inactive in database
+                var lobby = await _context.Lobbies
+                    .FirstOrDefaultAsync(l => l.LobbyCode == lobbyCode);
+                
+                if (lobby != null)
+                {
+                    lobby.IsActive = false;
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation($"Lobby {lobbyCode} marked as inactive");
+                }
+                
+                // Clear players from lobby
+                LobbyPlayers.TryRemove(lobbyCode, out _);
+                
+                // Notify remaining players that lobby is closed
+                await Clients.Group(lobbyCode).SendAsync("LobbyClosed");
+            }
+            else
+            {
+                // If a regular player leaves, just update the player list
+                await Clients.Group(lobbyCode).SendAsync("PlayerListUpdated", players.ToList());
+            }
         }
 
         // Start quiz: only the quizmaster may start
