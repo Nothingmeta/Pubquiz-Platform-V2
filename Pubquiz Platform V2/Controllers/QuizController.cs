@@ -167,7 +167,7 @@ namespace Pubquiz_Platform_V2.Controllers
 
 
         [HttpPost("Quiz/Edit/{quizSlug}")]
-        [ValidateAntiForgeryToken]
+        [IgnoreAntiforgeryToken]
         public IActionResult Edit(string quizSlug, QuizEditViewModel model, string action)
         {
             // Get current user's ID from claims

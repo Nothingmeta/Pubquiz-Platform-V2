@@ -187,14 +187,59 @@ namespace PubquizPlatform.Controllers
             {
                 try
                 {
-                    var secret = _protector.Unprotect(user.ProtectedTwoFactorSecret);
+                    string secret = null;
+                    try
+                    {
+                        secret = _protector.Unprotect(user.ProtectedTwoFactorSecret);
+                    }
+                    catch (Exception unprotectEx)
+                    {
+                        // Unprotect failed - this is the likely culprit
+                        System.Diagnostics.Debug.WriteLine($"[2FA DEBUG] Unprotect failed for UserId {userId}: {unprotectEx.Message}");
+                        user.TwoFactorFailedCount++;
+                        if (user.TwoFactorFailedCount >= MaxFailedTwoFactorAttempts)
+                        {
+                            user.TwoFactorLockoutEnd = DateTimeOffset.UtcNow.Add(TwoFactorLockoutDuration);
+                            user.TwoFactorFailedCount = 0;
+                        }
+                        _context.SaveChanges();
+                        
+                        return Json(new AuthResponseViewModel
+                        {
+                            Success = false,
+                            Message = "Invalid code."
+                        });
+                    }
+
+                    if (string.IsNullOrEmpty(secret))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[2FA DEBUG] Unprotected secret is null/empty for UserId {userId}");
+                        user.TwoFactorFailedCount++;
+                        if (user.TwoFactorFailedCount >= MaxFailedTwoFactorAttempts)
+                        {
+                            user.TwoFactorLockoutEnd = DateTimeOffset.UtcNow.Add(TwoFactorLockoutDuration);
+                            user.TwoFactorFailedCount = 0;
+                        }
+                        _context.SaveChanges();
+                        
+                        return Json(new AuthResponseViewModel
+                        {
+                            Success = false,
+                            Message = "Invalid code."
+                        });
+                    }
+
                     var bytes = Base32Encoding.ToBytes(secret);
                     var totp = new Totp(bytes);
                     var sanitized = (model.Code ?? string.Empty).Replace(" ", "").Replace("-", "");
-                    bool totpValid = totp.VerifyTotp(sanitized, out _, new VerificationWindow(2, 2));
+                    
+                    System.Diagnostics.Debug.WriteLine($"[2FA DEBUG] Verifying TOTP for UserId {userId}, Code: {sanitized}, Secret length: {secret.Length}");
+                    
+                    bool totpValid = totp.VerifyTotp(sanitized, out _, new VerificationWindow(6, 6));
 
                     if (totpValid)
                     {
+                        System.Diagnostics.Debug.WriteLine($"[2FA DEBUG] TOTP verification SUCCESS for UserId {userId}");
                         user.TwoFactorFailedCount = 0;
                         user.TwoFactorLockoutEnd = null;
                         _context.SaveChanges();
@@ -207,8 +252,15 @@ namespace PubquizPlatform.Controllers
                             AccessToken = accessToken
                         });
                     }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[2FA DEBUG] TOTP verification FAILED for UserId {userId}");
+                    }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[2FA DEBUG] Exception in TOTP verification for UserId {userId}: {ex.Message} - {ex.StackTrace}");
+                }
             }
 
             // Verify Recovery Code

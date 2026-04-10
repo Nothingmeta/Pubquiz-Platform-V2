@@ -108,12 +108,17 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var databaseProvider = dbContext.Database.ProviderName;
+        
+        Console.WriteLine($"Database provider: {databaseProvider}");
+        Console.WriteLine("Attempting database migration...");
+        
         dbContext.Database.Migrate();
-        Console.WriteLine("Database migration completed successfully.");
+        Console.WriteLine("✅ Database migration completed successfully.");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Database migration failed: {ex.Message}");
+        Console.WriteLine($"❌ Database migration failed: {ex.Message}");
     }
 }
 

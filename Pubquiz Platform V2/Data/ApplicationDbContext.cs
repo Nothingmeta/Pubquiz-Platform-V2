@@ -10,12 +10,33 @@ namespace Pubquiz_Platform.Data
         public DbSet<User> Users { get; set; }
         public DbSet<Quiz> Quizzes { get; set; }
         public DbSet<Question> Questions { get; set; }
-
         public DbSet<Lobby> Lobbies { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // Configure all ID fields as auto-increment (ValueGeneratedOnAdd)
+            modelBuilder.Entity<User>()
+                .Property(u => u.UserId)
+                .ValueGeneratedOnAdd();
+
+            modelBuilder.Entity<Quiz>()
+                .Property(q => q.QuizId)
+                .ValueGeneratedOnAdd();
+
+            modelBuilder.Entity<Question>()
+                .Property(q => q.QuestionId)
+                .ValueGeneratedOnAdd();
+
+            modelBuilder.Entity<Lobby>()
+                .Property(l => l.LobbyId)
+                .ValueGeneratedOnAdd();
+
+            // Configure IsActive default
+            modelBuilder.Entity<Lobby>()
+                .Property(l => l.IsActive)
+                .HasDefaultValue(true);
 
             // Relatie: User → Quizzes (1:N)
             modelBuilder.Entity<Quiz>()
@@ -31,8 +52,8 @@ namespace Pubquiz_Platform.Data
                 .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Quiz>()
-            .HasIndex(q => new { q.QuizMasterId, q.QuizSlug })
-            .IsUnique();
+                .HasIndex(q => new { q.QuizMasterId, q.QuizSlug })
+                .IsUnique();
         }
     }
 }
