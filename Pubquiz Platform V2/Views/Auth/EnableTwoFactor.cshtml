@@ -15,7 +15,7 @@
     <div class="qr-section" style="text-align:center;">
         <p>Scan this QR code with an authenticator app (Google Authenticator, Microsoft Authenticator, etc.)</p>
         <img src="@Model.QrCodeDataUri" alt="QR Code" style="max-width:250px;" />
-        
+
         <p style="margin-top:20px;">Or enter this code manually:</p>
         <code style="font-size:16px; padding:10px; background:#f0f0f0; display:inline-block;">@Model.ManualEntryKey</code>
     </div>
@@ -34,7 +34,7 @@
     document.getElementById('confirmBtn').addEventListener('click', async function() {
         const code = document.getElementById('code').value;
         const errorEl = document.getElementById('errorMessage');
-        const secret = '@Model.TempSecret';  // From the backend
+        const secret = '@Model.TempSecret';
 
         if (!code || code.length !== 6) {
             errorEl.textContent = 'Please enter a 6-digit code';
@@ -51,10 +51,11 @@
         try {
             const response = await fetch('/Auth/EnableTwoFactor', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     secret: secret,
                     code: code
                 })
@@ -68,18 +69,11 @@
                 return;
             }
 
-            // 2FA setup successful - show recovery codes
-            const codes = data.recoveryCodes.join('\n');
-            alert('2FA Setup Complete!\n\nSave these recovery codes:\n\n' + codes);
+            if (data.recoveryCodes && data.recoveryCodes.length > 0) {
+                const codes = data.recoveryCodes.join('\n');
+                alert('2FA Setup Complete!\n\nSave these recovery codes:\n\n' + codes);
+            }
 
-            // Store access token in BOTH localStorage and secure cookie
-            localStorage.setItem('auth_token', data.accessToken);
-            document.cookie = `auth_token=${data.accessToken}; path=/; max-age=900; samesite=strict`;
-            
-            // Clear pre-auth token
-            document.cookie = 'preAuthToken=; path=/; max-age=0';
-            
-            // Redirect to home
             window.location.href = '/Home/Index';
 
         } catch (error) {

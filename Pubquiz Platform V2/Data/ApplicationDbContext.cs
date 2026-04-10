@@ -33,11 +33,6 @@ namespace Pubquiz_Platform.Data
                 .Property(l => l.LobbyId)
                 .ValueGeneratedOnAdd();
 
-            // Configure IsActive default
-            modelBuilder.Entity<Lobby>()
-                .Property(l => l.IsActive)
-                .HasDefaultValue(true);
-
             // Relatie: User → Quizzes (1:N)
             modelBuilder.Entity<Quiz>()
                 .HasOne(q => q.QuizMaster)

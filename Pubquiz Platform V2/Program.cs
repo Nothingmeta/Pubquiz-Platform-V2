@@ -76,6 +76,8 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+builder.Services.AddSingleton<ISecretCryptoService, SecureStringCryptoService>();
+
 builder.Services.AddAuthorization();
 builder.Services.AddControllersWithViews();
 builder.Services.AddSignalR();
@@ -143,10 +145,7 @@ app.UseAuthorization();
 // Add a simple root redirect - redirect before routing to avoid auth checks
 app.MapGet("/", async context =>
 {
-    // Check if authenticated by looking for token
-    var hasToken = context.Request.Cookies.TryGetValue("auth_token", out var token) && !string.IsNullOrEmpty(token);
-    
-    if (hasToken)
+    if (context.User?.Identity?.IsAuthenticated == true)
     {
         context.Response.Redirect("/Home/Index");
     }
@@ -154,6 +153,7 @@ app.MapGet("/", async context =>
     {
         context.Response.Redirect("/Auth/Login");
     }
+
     await Task.CompletedTask;
 });
 

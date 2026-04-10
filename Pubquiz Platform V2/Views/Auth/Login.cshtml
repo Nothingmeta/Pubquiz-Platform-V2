@@ -12,7 +12,7 @@
     <div class="auth-form">
         <div class="form-group">
             <label for="email">Email</label>
-            <input id="email" type="text"/>
+            <input id="email" type="text" />
         </div>
 
         <div class="form-group">
@@ -46,6 +46,7 @@
         try {
             const response = await fetch('/Auth/Login', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: {
                     'Content-Type': 'application/json'
                 },
@@ -60,14 +61,6 @@
                 return;
             }
 
-            // Store pre-auth token in BOTH sessionStorage and cookie
-            sessionStorage.setItem('preAuthToken', data.preAuthToken);
-            sessionStorage.setItem('userId', data.userId);
-            
-            // Also store in cookie so it's sent with the next GET request
-            document.cookie = `preAuthToken=${data.preAuthToken}; path=/; samesite=strict; max-age=300`;
-
-            // Check message to determine next step
             if (data.message === "2FA setup required") {
                 window.location.href = '/Auth/EnableTwoFactor';
                 return;
@@ -78,7 +71,6 @@
                 return;
             }
 
-            // This shouldn't happen, but just in case
             errorEl.textContent = 'Unexpected response from server';
             errorEl.style.display = 'block';
 
