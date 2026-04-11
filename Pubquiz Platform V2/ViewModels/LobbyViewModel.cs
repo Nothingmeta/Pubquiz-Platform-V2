@@ -5,6 +5,7 @@ namespace Pubquiz_Platform_V2.ViewModels
         public string LobbyCode { get; set; }
         public string QuizName { get; set; }
         public string QuizMasterName { get; set; }
+        public int QuizMasterId { get; set; }
         public List<string> Players { get; set; } = new();
     }
 }

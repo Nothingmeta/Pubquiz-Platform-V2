@@ -3,79 +3,92 @@
     ViewData["Title"] = "Quiz bewerken";
 }
 
-<div class="container d-flex flex-column align-items-center justify-content-center" style="min-height: 100vh;">
-    <!-- Hamburger menu and save button -->
-    <div class="w-100 d-flex justify-content-between align-items-center mb-3">
+<div class="container mt-4 pb-5">
+    <!-- Hamburger menu and Save button -->
+    <div class="w-100 d-flex justify-content-between align-items-start mb-4">
         <div>
             <button class="btn btn-outline-secondary" type="button" data-bs-toggle="dropdown">
-                <span class="navbar-toggler-icon"></span>
+                <i class="bi bi-list"></i>
             </button>
             <ul class="dropdown-menu">
                 <li><a class="dropdown-item" href="/">Home</a></li>
-                <li><a class="dropdown-item" href="/Manage">Quiz beheer</a></li>
+                <li><a class="dropdown-item" href="/Quiz/Manage">Quiz beheer</a></li>
             </ul>
         </div>
         <button type="submit" form="quizForm" class="btn btn-outline-success">
-            <i class="bi bi-save"></i>
+            <i class="bi bi-save"></i> Opslaan
         </button>
     </div>
 
-    <h2 class="mb-2">Quiz beheer</h2>
-    <h4 class="mb-4">@Model.QuizName</h4>
+    <!-- Title section -->
+    <div class="text-center mb-4">
+        <h2 class="mb-2">Quiz beheer</h2>
+        <h4>@Model.QuizName</h4>
+    </div>
 
-    <form id="quizForm" asp-action="Edit" asp-route-quizSlug="@Model.QuizSlug" method="post" class="w-100" style="max-width: 400px;">
-        <input type="hidden" asp-for="QuizId" />
-        <input type="hidden" asp-for="QuizName" />
-        <input type="hidden" asp-for="CurrentQuestionIndex" />
-        <input type="hidden" asp-for="CurrentQuestion.QuestionId" />
-        <input type="hidden" asp-for="CurrentQuestion.QuestionNumber" />
-        @for (int i = 0; i < Model.Questions.Count; i++)
-        {
-            <input type="hidden" asp-for="Questions[@i].QuestionId" />
-            <input type="hidden" asp-for="Questions[@i].QuestionText" />
-            <input type="hidden" asp-for="Questions[@i].QuestionNumber" />
-            <input type="hidden" asp-for="Questions[@i].CorrectAnswerIndex" />
-            @for (int j = 0; j < Model.Questions[i].Answers.Count; j++)
+    <!-- Form -->
+    <div class="d-flex justify-content-center">
+        <form id="quizForm" asp-action="Edit" asp-route-quizSlug="@Model.QuizSlug" method="post" class="w-100" style="max-width: 400px;">
+            <input type="hidden" asp-for="QuizId" />
+            <input type="hidden" asp-for="QuizName" />
+            <input type="hidden" asp-for="CurrentQuestionIndex" />
+            <input type="hidden" asp-for="CurrentQuestion.QuestionId" />
+            <input type="hidden" asp-for="CurrentQuestion.QuestionNumber" />
+            @for (int i = 0; i < Model.Questions.Count; i++)
             {
-                <input type="hidden" asp-for="Questions[@i].Answers[@j]" />
+                <input type="hidden" asp-for="Questions[@i].QuestionId" />
+                <input type="hidden" asp-for="Questions[@i].QuestionText" />
+                <input type="hidden" asp-for="Questions[@i].QuestionNumber" />
+                <input type="hidden" asp-for="Questions[@i].CorrectAnswerIndex" />
+                @for (int j = 0; j < Model.Questions[i].Answers.Count; j++)
+                {
+                    <input type="hidden" asp-for="Questions[@i].Answers[@j]" />
+                }
             }
-        }
-        <div class="mb-3">
-            <label asp-for="CurrentQuestion.QuestionText" class="form-label">Vraag</label>
-            <textarea asp-for="CurrentQuestion.QuestionText" class="form-control" rows="3"></textarea>
-            <span asp-validation-for="CurrentQuestion.QuestionText" class="text-danger"></span>
-        </div>
 
-        <div class="row mb-3">
-            @for (int i = 0; i < 4; i++)
-            {
-                <div class="col-6 mb-2">
-                    <div class="input-group">
-                        <div class="input-group-text">
-                            <input type="radio" asp-for="CurrentQuestion.CorrectAnswerIndex" value="@i" />
+            <div class="mb-3">
+                <label asp-for="CurrentQuestion.QuestionText" class="form-label">Vraag</label>
+                <textarea asp-for="CurrentQuestion.QuestionText" 
+                          class="form-control" 
+                          rows="3"
+                          placeholder="nieuwe vraag"
+                          required></textarea>
+                <span asp-validation-for="CurrentQuestion.QuestionText" class="text-danger"></span>
+            </div>
+
+            <div class="row mb-3">
+                @for (int i = 0; i < 4; i++)
+                {
+                    <div class="col-6 mb-2">
+                        <div class="input-group">
+                            <div class="input-group-text">
+                                <input type="radio" asp-for="CurrentQuestion.CorrectAnswerIndex" value="@i" />
+                            </div>
+                            <input type="text" 
+                                   class="form-control"
+                                   asp-for="CurrentQuestion.Answers[@i]"
+                                   placeholder="Standaard antwoord"
+                                   required />
                         </div>
-                        <input type="text" class="form-control"
-                               asp-for="CurrentQuestion.Answers[@i]"
-                               placeholder="Antwoord @(i + 1)" />
                     </div>
-                </div>
-            }
-        </div>
+                }
+            </div>
 
-        <div class="d-flex justify-content-between align-items-center">
-            <button type="submit" name="action" value="prev" class="btn btn-outline-secondary" @(Model.CurrentQuestionIndex == 0 ? "disabled" : "")>
-                &lt;
-            </button>
-            <span>@(Model.CurrentQuestionIndex + 1) van @(Model.TotalQuestions)</span>
-            <button type="submit" name="action" value="next" class="btn btn-outline-secondary">
-                &gt;
-            </button>
-        </div>
-    </form>
+            <div class="d-flex justify-content-between align-items-center">
+                <button type="submit" name="action" value="prev" class="btn btn-outline-secondary" @(Model.CurrentQuestionIndex == 0 ? "disabled" : "")>
+                    &lt;
+                </button>
+                <span>@(Model.CurrentQuestionIndex + 1) van @(Model.TotalQuestions)</span>
+                <button type="submit" name="action" value="next" class="btn btn-outline-secondary">
+                    &gt;
+                </button>
+            </div>
+        </form>
+    </div>
 
     @if (!ViewData.ModelState.IsValid)
     {
-        <div class="alert alert-danger">
+        <div class="alert alert-danger mt-3">
             <ul>
             @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
             {

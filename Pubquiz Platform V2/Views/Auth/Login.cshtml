@@ -1,6 +1,7 @@
 ﻿@{
     ViewData["Title"] = "Inloggen";
 }
+
 <div class="container d-flex flex-column align-items-center logo">
     <img src="../../images/PubquizPlatform.png" alt="Pubquiz Logo" width="200" />
 </div>
@@ -8,27 +9,75 @@
 <div class="auth-container">
     <h2>Inloggen</h2>
 
-    <form method="post" class="auth-form">
+    <div class="auth-form">
         <div class="form-group">
             <label for="email">Email</label>
-            <input id="email" type="text" name="Email" />
+            <input id="email" type="text" />
         </div>
 
         <div class="form-group">
             <label for="password">Wachtwoord</label>
-            <input id="password" type="password" name="password" />
+            <input id="password" type="password" />
         </div>
 
-        <button type="submit" class="btn-primary">Inloggen</button>
-    </form>
+        <button type="button" class="btn-primary" id="loginBtn">Inloggen</button>
+    </div>
 
     <p class="auth-link">
         Heb je nog geen account?
         <a href="/Auth/Register">Maak er hier één aan</a>.
     </p>
 
-    @if (ViewBag.Error != null)
-    {
-        <p class="error-message">@ViewBag.Error</p>
-    }
+    <p id="errorMessage" class="error-message" style="display:none;"></p>
 </div>
+
+<script>
+    document.getElementById('loginBtn').addEventListener('click', async function() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const errorEl = document.getElementById('errorMessage');
+
+        if (!email || !password) {
+            errorEl.textContent = 'Email en wachtwoord zijn verplicht';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        try {
+            const response = await fetch('/Auth/Login', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+
+            if (!data.success) {
+                errorEl.textContent = data.message;
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            if (data.message === "2FA setup required") {
+                window.location.href = '/Auth/EnableTwoFactor';
+                return;
+            }
+
+            if (data.message === "2FA required") {
+                window.location.href = '/Auth/TwoFactor';
+                return;
+            }
+
+            errorEl.textContent = 'Unexpected response from server';
+            errorEl.style.display = 'block';
+
+        } catch (error) {
+            console.error('Login error:', error);
+            errorEl.textContent = 'An error occurred during login';
+            errorEl.style.display = 'block';
+        }
+    });
+</script>

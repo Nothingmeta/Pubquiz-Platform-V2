@@ -1,43 +1,85 @@
-﻿@model Pubquiz_Platform_V2.ViewModels.EnableTwoFactorViewModel
+﻿@using Pubquiz_Platform_V2.ViewModels
+@model EnableTwoFactorViewModel
 
 @{
-    ViewData["Title"] = "Enable Two-Factor Authentication";
+    ViewData["Title"] = "2FA Setup";
 }
 
-<div class="d-flex justify-content-center mt-5">
-    <div class="card p-4 shadow-sm" style="max-width:420px; width:100%;">
-        <div class="text-center mb-3">
-            <img src="~/images/PubquizPlatform.png" alt="Pubquiz Logo" width="150" class="mx-auto d-block" />
-        </div>
-
-        <h4 class="text-center mb-3">@ViewData["Title"]</h4>
-
-        <p class="text-center mb-3">Scan the QR with your authenticator app (Google Authenticator, Authy, etc.) or enter the key manually.</p>
-
-        <div class="d-flex justify-content-center mb-3">
-            <img style="max-width:300px; max-height:300px;" src="@Model.QrCodeDataUri" alt="QR code for authenticator" />
-        </div>
-
-        <div class="mb-3">
-            <p class="mb-1"><strong>Manual entry key:</strong></p>
-            <p class="bg-light p-2 rounded"><code>@Model.ManualEntryKey</code></p>
-        </div>
-
-        <form method="post" asp-action="EnableTwoFactor" class="mb-0">
-            <div class="mb-3">
-                <label for="code" class="form-label">Enter the verification code from your app</label>
-                <input class="form-control" id="code" name="code" />
-            </div>
-
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary flex-grow-1">Verify and Enable</button>
-                <a class="btn btn-outline-secondary" asp-action="Index" asp-controller="Home">Cancel</a>
-            </div>
-        </form>
-
-        @if (!string.IsNullOrEmpty(ViewBag.Error))
-        {
-            <div class="text-danger mt-3">@ViewBag.Error</div>
-        }
-    </div>
+<div class="container d-flex flex-column align-items-center logo">
+    <img src="~/images/PubquizPlatform.png" alt="Pubquiz Logo" width="150" />
 </div>
+
+<div class="auth-container">
+    <h2>Enable Two-Factor Authentication</h2>
+
+    <div class="qr-section" style="text-align:center;">
+        <p>Scan this QR code with an authenticator app (Google Authenticator, Microsoft Authenticator, etc.)</p>
+        <img src="@Model.QrCodeDataUri" alt="QR Code" style="max-width:250px;" />
+
+        <p style="margin-top:20px;">Or enter this code manually:</p>
+        <code style="font-size:16px; padding:10px; background:#f0f0f0; display:inline-block;">@Model.ManualEntryKey</code>
+    </div>
+
+    <div class="form-group" style="margin-top:30px; text-align:center;">
+        <label for="code">Enter the 6-digit code from your authenticator:</label>
+        <input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="000000" />
+    </div>
+
+    <button type="button" class="btn-primary" id="confirmBtn">Confirm 2FA</button>
+
+    <p id="errorMessage" class="error-message" style="display:none;"></p>
+</div>
+
+<script>
+    document.getElementById('confirmBtn').addEventListener('click', async function() {
+        const code = document.getElementById('code').value;
+        const errorEl = document.getElementById('errorMessage');
+        const secret = '@Model.TempSecret';
+
+        if (!code || code.length !== 6) {
+            errorEl.textContent = 'Please enter a 6-digit code';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        if (!secret) {
+            errorEl.textContent = 'Secret not found. Please try again.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        try {
+            const response = await fetch('/Auth/EnableTwoFactor', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    secret: secret,
+                    code: code
+                })
+            });
+
+            const data = await response.json();
+
+            if (!data.success) {
+                errorEl.textContent = data.message;
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            if (data.recoveryCodes && data.recoveryCodes.length > 0) {
+                const codes = data.recoveryCodes.join('\n');
+                alert('2FA Setup Complete!\n\nSave these recovery codes:\n\n' + codes);
+            }
+
+            window.location.href = '/Home/Index';
+
+        } catch (error) {
+            console.error('2FA setup error:', error);
+            errorEl.textContent = 'An error occurred setting up 2FA';
+            errorEl.style.display = 'block';
+        }
+    });
+</script>

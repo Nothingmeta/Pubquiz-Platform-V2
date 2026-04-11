@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Pubquiz_Platform.Data;
 using Pubquiz_Platform.Data.Entities;
@@ -6,6 +7,7 @@ using Pubquiz_Platform_V2.ViewModels;
 
 namespace Pubquiz_Platform_V2.Controllers
 {
+    [Authorize]
     public class QuizController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -165,7 +167,7 @@ namespace Pubquiz_Platform_V2.Controllers
 
 
         [HttpPost("Quiz/Edit/{quizSlug}")]
-        [ValidateAntiForgeryToken]
+        [IgnoreAntiforgeryToken]
         public IActionResult Edit(string quizSlug, QuizEditViewModel model, string action)
         {
             // Get current user's ID from claims
@@ -343,33 +345,31 @@ namespace Pubquiz_Platform_V2.Controllers
         {
             if (string.IsNullOrWhiteSpace(lobbyCode))
             {
-                // Optionally, redirect to overview or show an error
                 TempData["Error"] = "Geen lobbycode opgegeven.";
                 return RedirectToAction("LobbyOverview");
             }
 
-            // Find the lobby by code (case-insensitive)
             var lobby = _context.Lobbies
                 .Include(l => l.Quiz)
-                .Include(l => l.Quiz.QuizMaster)
-                .FirstOrDefault(l => l.LobbyCode.ToLower() == lobbyCode.ToLower() && l.IsActive);
+                    .ThenInclude(q => q.QuizMaster)
+                .FirstOrDefault(l => l.LobbyCode == lobbyCode && l.IsActive);
 
             if (lobby == null)
             {
-                TempData["Error"] = "Lobby niet gevonden of niet actief.";
+                TempData["Error"] = "Lobby niet gevonden.";
                 return RedirectToAction("LobbyOverview");
             }
 
-            // Prepare the view model
             var model = new LobbyViewModel
             {
                 LobbyCode = lobby.LobbyCode,
                 QuizName = lobby.Quiz.QuizName,
                 QuizMasterName = lobby.Quiz.QuizMaster?.Name ?? "Onbekend",
-                Players = lobby.Players?.Select(p => p.Name).ToList() ?? new List<string>()
+                QuizMasterId = lobby.Quiz.QuizMasterId,
+                Players = new List<string>() // SignalR will populate this
             };
 
-            return View("Lobby", model);
+            return View(model);
         }
 
         [HttpPost]
@@ -427,12 +427,16 @@ namespace Pubquiz_Platform_V2.Controllers
             if (lobby == null)
                 return NotFound();
 
-            bool isQuizMaster = false;
-            var loggedInName = User.Identity?.Name;
-            if (!string.IsNullOrEmpty(loggedInName) && lobby.Quiz?.QuizMaster != null)
+            // Get current user's ID from JWT claims (not just by name)
+            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId");
+            int currentUserId = 0;
+            if (userIdClaim != null && int.TryParse(userIdClaim.Value, out var id))
             {
-                isQuizMaster = string.Equals(lobby.Quiz.QuizMaster.Name, loggedInName, StringComparison.OrdinalIgnoreCase);
+                currentUserId = id;
             }
+
+            // Check if current user is the quizmaster of THIS specific lobby
+            bool isQuizMasterOfThisLobby = currentUserId > 0 && lobby.Quiz?.QuizMasterId == currentUserId;
 
             var questions = (lobby.Quiz?.Questions ?? new List<Question>()).OrderBy(q => q.QuestionNumber).ToList();
 
@@ -440,30 +444,31 @@ namespace Pubquiz_Platform_V2.Controllers
             {
                 LobbyCode = lobbyCode,
                 QuizName = lobby.Quiz?.QuizName ?? "Quiz",
+                QuizMasterId = lobby.Quiz?.QuizMasterId ?? 0,
+                IsQuizMasterOfThisLobby = isQuizMasterOfThisLobby,
                 CurrentQuestionIndex = 0,
                 Questions = questions.Select(q =>
                 {
                     var answers = new List<string>
-            {
-                q.CorrectAnswer,
-                q.FalseAnswer1,
-                q.FalseAnswer2,
-                q.FalseAnswer3
-            };
+                    {
+                        q.CorrectAnswer,
+                        q.FalseAnswer1,
+                        q.FalseAnswer2,
+                        q.FalseAnswer3
+                    };
 
-                    // For safety: do not include the correct index for regular players.
+                    // Only show correct answer to the actual quizmaster of this lobby
                     var qvm = new QuestionPlayViewModel
                     {
                         QuestionId = q.QuestionId,
                         QuestionText = q.QuestionText,
                         Answers = answers,
-                        CorrectAnswerIndex = isQuizMaster ? 0 : (int?)null
+                        CorrectAnswerIndex = isQuizMasterOfThisLobby ? 0 : (int?)null
                     };
                     return qvm;
                 }).ToList()
             };
 
-            // Return view that expects QuizPlayFullViewModel
             return View(model);
         }
     }

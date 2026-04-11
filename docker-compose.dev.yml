@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pubquiz-db-dev
+    environment:
+      POSTGRES_USER: pubquiz_user
+      POSTGRES_PASSWORD: LocalDevPassword123!
+      POSTGRES_DB: pubquiz_db
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - pubquiz-network
+
+networks:
+  pubquiz-network:
+    driver: bridge
+
+volumes:
+  postgres_dev_data:

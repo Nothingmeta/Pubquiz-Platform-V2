@@ -1,7 +1,7 @@
 ﻿@model Pubquiz_Platform_V2.ViewModels.QuizPlayFullViewModel
 @{
     ViewData["Title"] = Model.QuizName;
-    var isQuizMaster = User.IsInRole("QuizMaster") || User.IsInRole("quizmaster");
+    var isQuizMasterOfThisLobby = Model.IsQuizMasterOfThisLobby;
     var lobbyCode = Model.LobbyCode;
     var currentUserName = User.Identity?.Name ?? "";
 
@@ -12,8 +12,8 @@
             questionId = q.QuestionId,
             questionText = q.QuestionText,
             answers = q.Answers ?? new List<string>(),
-            // Only present for quizmaster
-            correctAnswerIndex = isQuizMaster ? q.CorrectAnswerIndex : null
+            // Only present for the actual quizmaster of this lobby
+            correctAnswerIndex = isQuizMasterOfThisLobby ? q.CorrectAnswerIndex : null
         })
     );
 
@@ -28,7 +28,7 @@
             <div id="answersContainer" class="row mt-3"></div>
         </div>
         <div class="card-footer d-flex justify-content-between">
-            @if (isQuizMaster)
+            @if (isQuizMasterOfThisLobby)
             {
                 <div>
                     <button id="prevBtn" class="btn btn-outline-secondary" onclick="prevQuestion()">Vorige</button>
@@ -60,7 +60,7 @@
     // Lobby / user info from server-render
     const lobbyCode = "@lobbyCode";
     const currentUserName = "@currentUserName";
-    const isQuizMaster = @isQuizMaster.ToString().ToLower();
+    const isQuizMaster = @isQuizMasterOfThisLobby.ToString().ToLower();
 
     // Local state
     let playerName = null;

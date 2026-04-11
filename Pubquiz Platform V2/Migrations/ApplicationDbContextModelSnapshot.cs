@@ -134,6 +134,12 @@ namespace Pubquiz_Platform_V2.Migrations
                     b.Property<string>("ProtectedTwoFactorSecret")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("RefreshToken")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RefreshTokenExpiryTime")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasColumnType("TEXT");

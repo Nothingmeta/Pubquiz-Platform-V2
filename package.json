@@ -1,0 +1,29 @@
+{
+  "name": "pubquiz-platform-v2",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "dotnet run --project \"Pubquiz Platform V2\" --urls \"http://localhost:5000\"",
+    "cy:open": "cypress open",
+    "cy:run": "cypress run"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "cypress": "^12.17.4",
+    "typescript": "^6.0.2"
+  },
+  "description": "",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nothingmeta/Pubquiz-Platform-V2.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Nothingmeta/Pubquiz-Platform-V2/issues"
+  },
+  "homepage": "https://github.com/Nothingmeta/Pubquiz-Platform-V2#readme"
+}
