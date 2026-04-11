@@ -1,5 +1,7 @@
 describe("Register page", () => {
     beforeEach(() => {
+        cy.clearCookies();
+        cy.clearLocalStorage();
         cy.visit("/Auth/Register");
     });
 
