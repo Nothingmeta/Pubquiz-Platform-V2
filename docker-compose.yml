@@ -40,7 +40,7 @@ services:
       Testing__SeedDockerTestUser: "true"
       Testing__BypassTwoFactorForDisabledUsers: "true"
       Testing__DockerTestUser__Email: "zap@test.local"
-      Testing__DockerTestUser__Password: "ZAP-ChangeMe123!"
+      Testing__DockerTestUser__Password: "ZAP-Password123!"
       Testing__DockerTestUser__Name: "ZAP Test User"
       Testing__DockerTestUser__Role: "quizmaster"
     ports:
