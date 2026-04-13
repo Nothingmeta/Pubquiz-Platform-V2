@@ -71,9 +71,7 @@
                 return;
             }
 
-            errorEl.textContent = 'Unexpected response from server';
-            errorEl.style.display = 'block';
-
+            window.location.href = '/Home/Index';
         } catch (error) {
             console.error('Login error:', error);
             errorEl.textContent = 'An error occurred during login';

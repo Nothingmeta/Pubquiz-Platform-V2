@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Pubquiz_Platform.Data;
+using Pubquiz_Platform.Data.Entities;
 using Pubquiz_Platform_V2.Models;
 using Pubquiz_Platform_V2.Services;
 using System.Text;
@@ -110,18 +112,61 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         var databaseProvider = dbContext.Database.ProviderName;
-        
+
         Console.WriteLine($"Database provider: {databaseProvider}");
         Console.WriteLine("Attempting database migration...");
-        
+
         dbContext.Database.Migrate();
         Console.WriteLine("✅ Database migration completed successfully.");
+
+        SeedDockerTestUser(dbContext, configuration);
     }
     catch (Exception ex)
     {
         Console.WriteLine($"❌ Database migration failed: {ex.Message}");
     }
+}
+
+static void SeedDockerTestUser(ApplicationDbContext dbContext, IConfiguration configuration)
+{
+    var enabled = configuration.GetValue<bool>("Testing:SeedDockerTestUser");
+    if (!enabled)
+    {
+        return;
+    }
+
+    var email = configuration["Testing:DockerTestUser:Email"] ?? "zap@test.local";
+    var password = configuration["Testing:DockerTestUser:Password"] ?? "ZAP-ChangeMe123!";
+    var name = configuration["Testing:DockerTestUser:Name"] ?? "ZAP Test User";
+    var role = configuration["Testing:DockerTestUser:Role"] ?? "quizmaster";
+
+    var user = dbContext.Users.FirstOrDefault(u => u.Email == email);
+    if (user == null)
+    {
+        user = new User
+        {
+            Email = email
+        };
+
+        dbContext.Users.Add(user);
+    }
+
+    user.Name = name;
+    user.Role = role;
+    user.IsTwoFactorEnabled = false;
+    user.ProtectedTwoFactorSecret = null;
+    user.ProtectedRecoveryCodes = null;
+    user.TwoFactorFailedCount = 0;
+    user.TwoFactorLockoutEnd = null;
+
+    var hasher = new PasswordHasher<User>();
+    user.Password = hasher.HashPassword(user, password);
+
+    dbContext.SaveChanges();
+
+    Console.WriteLine($"✅ Seeded Docker test user: {email}");
 }
 
 // Enable detailed error messages in development

@@ -111,6 +111,20 @@ namespace PubquizPlatform.Controllers
                 });
             }
 
+            var bypassTwoFactor = _configuration.GetValue<bool>("Testing:BypassTwoFactorForDisabledUsers");
+
+            if (!user.IsTwoFactorEnabled && bypassTwoFactor)
+            {
+                IssueAuthCookies(user);
+
+                return Json(new AuthResponseViewModel
+                {
+                    Success = true,
+                    Message = "Login successful",
+                    UserId = user.UserId
+                });
+            }
+
             var preAuthToken = _jwtTokenService.GeneratePreAuthToken(user.UserId);
             SetPreAuthCookie(preAuthToken);
 
