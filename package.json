@@ -8,9 +8,10 @@
     "cy:run": "cypress run"
   },
   "devDependencies": {
-    "@types/node": "^25.5.2",
+    "@cypress/webpack-dev-server": "^2.5.0",
     "cypress": "^12.17.4",
-    "typescript": "^6.0.2"
+    "webpack": "^5.106.2",
+    "webpack-cli": "^5.1.4"
   },
   "description": "",
   "main": "index.js",
