@@ -47,7 +47,7 @@ namespace PubquizTests
             Assert.IsNotNull(result);
             var quiz = ctx.Quizzes.Include(q => q.Questions).FirstOrDefault();
             Assert.IsNotNull(quiz);
-            Assert.AreEqual(42, quiz.QuizMasterId);
+            Assert.That(quiz.QuizMasterId, Is.EqualTo(42));
             Assert.IsTrue(quiz.Questions.Any());
         }
 

@@ -3,14 +3,11 @@
     public class QuizEditViewModel
     {
         public int QuizId { get; set; }
-        public string QuizName { get; set; }
-        public string QuizSlug { get; set; }
-        public List<QuestionEditViewModel> Questions { get; set; }
+        public string QuizName { get; set; } = string.Empty;
+        public string QuizSlug { get; set; } = string.Empty;
+        public List<QuestionEditViewModel> Questions { get; set; } = new();
         public int CurrentQuestionIndex { get; set; }
-        public QuestionEditViewModel CurrentQuestion { get; set; } // <-- Add this
+        public QuestionEditViewModel CurrentQuestion { get; set; } = new();
         public int TotalQuestions { get; set; }
-
-
     }
-
 }

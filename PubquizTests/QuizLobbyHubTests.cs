@@ -197,11 +197,27 @@ namespace PubquizTests
                     It.IsAny<CancellationToken>()),
                 Times.Once);
 
-            var showQuestionInvocation = groupProxy.Invocations
-                .Single(i => i.Arguments.Count == 3 && i.Arguments[0] as string == "ShowQuestion");
+            var showQuestionInvocation = groupProxy.Invocations.Single(i =>
+                i.Arguments.Count == 3 &&
+                i.Arguments[0] is string methodName &&
+                methodName == "ShowQuestion");
 
-            var payloadArgs = (object?[])showQuestionInvocation.Arguments[1]!;
-            var payload = payloadArgs[0]!;
+            if (showQuestionInvocation.Arguments[1] is not object?[] payloadArgs)
+            {
+                throw new InvalidOperationException("Expected ShowQuestion to receive a payload array.");
+            }
+
+            if (payloadArgs.Length != 1 || payloadArgs[0] is null)
+            {
+                throw new InvalidOperationException("Expected ShowQuestion payload to contain exactly one non-null object.");
+            }
+
+            var payload = payloadArgs[0];
+
+            if (payload == null)
+            {
+                throw new InvalidOperationException("ShowQuestion payload is null.");
+            }
 
             Assert.That(GetPropertyValue<string>(payload, "quizName"), Is.EqualTo("General Knowledge"));
             Assert.That(GetPropertyValue<string>(payload, "currentQuestionText"), Is.EqualTo("Capital of France?"));

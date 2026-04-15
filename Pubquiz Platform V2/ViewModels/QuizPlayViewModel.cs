@@ -2,11 +2,11 @@
 {
     public class QuizPlayViewModel
     {
-        public string QuizName { get; set; }
-        public string CurrentQuestionText { get; set; }
-        public List<string> Answers { get; set; }
+        public string QuizName { get; set; } = string.Empty;
+        public string CurrentQuestionText { get; set; } = string.Empty;
+        public List<string> Answers { get; set; } = new();
         public int QuestionId { get; set; }
-        public string LobbyCode { get; set; }
+        public string LobbyCode { get; set; } = string.Empty;
 
         // Overview: who got it right, wrong, or did not answer
         public List<string> CorrectPlayers { get; set; } = new();

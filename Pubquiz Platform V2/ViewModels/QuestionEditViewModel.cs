@@ -7,9 +7,9 @@ namespace Pubquiz_Platform_V2.ViewModels
         public int? QuestionId { get; set; }
 
         [Required(ErrorMessage = "Question text is required.")]
-        public string QuestionText { get; set; }
+        public string QuestionText { get; set; } = string.Empty;
 
-        public List<string> Answers { get; set; } = new List<string> { "", "", "", "" };
+        public List<string> Answers { get; set; } = new() { "", "", "", "" };
 
         public int CorrectAnswerIndex { get; set; }
         public int QuestionNumber { get; set; }

@@ -268,7 +268,8 @@ namespace PubquizTests
         private bool HasSetCookie(string cookieName)
         {
             var headers = _controller!.ControllerContext.HttpContext.Response.Headers["Set-Cookie"];
-            return headers.Any(h => h.StartsWith($"{cookieName}=", StringComparison.OrdinalIgnoreCase));
+
+            return headers.Any(h => h?.StartsWith($"{cookieName}=", StringComparison.OrdinalIgnoreCase) == true);
         }
     }
 }

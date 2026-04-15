@@ -130,19 +130,19 @@ namespace Pubquiz_Platform_V2.Controllers
                     QuestionId = q.QuestionId,
                     QuestionText = q.QuestionText,
                     Answers = new List<string>
-            {
-                q.CorrectAnswer,
-                q.FalseAnswer1,
-                q.FalseAnswer2,
-                q.FalseAnswer3
-            },
-                    CorrectAnswerIndex = 0, // We'll fix this below
+        {
+            q.CorrectAnswer,
+            q.FalseAnswer1,
+            q.FalseAnswer2,
+            q.FalseAnswer3
+        },
+                    CorrectAnswerIndex = 0,
                     QuestionNumber = q.QuestionNumber
                 }).ToList(),
                 CurrentQuestionIndex = questionIndex,
                 TotalQuestions = questions.Count,
-                CurrentQuestion = null // Set below
-            };
+                CurrentQuestion = new QuestionEditViewModel()
+            }; 
 
             // Set correct answer index for each question
             for (int i = 0; i < model.Questions.Count; i++)
@@ -155,6 +155,7 @@ namespace Pubquiz_Platform_V2.Controllers
             q.FalseAnswer2,
             q.FalseAnswer3
         };
+
                 int correctIndex = 0; // CorrectAnswer is always at index 0
                 model.Questions[i].CorrectAnswerIndex = correctIndex;
                 model.Questions[i].Answers = answers;
@@ -195,19 +196,18 @@ namespace Pubquiz_Platform_V2.Controllers
             if (ModelState.IsValid && model.CurrentQuestion != null)
             {
                 var qvm = model.CurrentQuestion;
-                Question questionEntity = null;
+                Question? questionEntity = null;
 
-                // If editing an existing question
                 if (qvm.QuestionId.HasValue)
                 {
                     questionEntity = questions.FirstOrDefault(q => q.QuestionId == qvm.QuestionId.Value);
                 }
 
-                // If not found (shouldn't happen), fallback to index
                 if (questionEntity == null && questionIndex < questions.Count)
                 {
                     questionEntity = questions[questionIndex];
                 }
+
                 if (questionEntity != null)
                 {
                     questionEntity.QuestionText = qvm.QuestionText;
