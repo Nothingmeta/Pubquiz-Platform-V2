@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "Registreren";
 }
+
 <div class="container d-flex flex-column align-items-center logo">
     <img src="../../images/PubquizPlatform.png" alt="Pubquiz Logo" width="200" />
 </div>
@@ -10,6 +11,7 @@
     <h2>Registreren</h2>
 
     <form method="post" class="auth-form">
+        @Html.AntiForgeryToken()
         <div class="form-group">
             <label asp-for="Email"></label>
             <input asp-for="Email" />
@@ -37,7 +39,6 @@
             </select>
             <span asp-validation-for="Role" class="field-validation"></span>
 
-            <!-- Web Component showing role description -->
             <role-info for="roleSelect"></role-info>
         </div>
 

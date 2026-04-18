@@ -52,14 +52,19 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
 <script type="module" src="~/js/components/countdown-timer.js"></script>
+@using System.Text.Json
+@{
+    var lobbyCodeJson = JsonSerializer.Serialize(lobbyCode);
+    var currentUserNameJson = JsonSerializer.Serialize(currentUserName);
+}
 <script>
     // Preloaded questions (immutable snapshot from server render)
     const clientQuestions = @Html.Raw(jsQuestions);
     let currentIndex = @initialIndex;
 
     // Lobby / user info from server-render
-    const lobbyCode = "@lobbyCode";
-    const currentUserName = "@currentUserName";
+    const lobbyCode = @Html.Raw(lobbyCodeJson);
+    const currentUserName = @Html.Raw(currentUserNameJson);
     const isQuizMaster = @isQuizMasterOfThisLobby.ToString().ToLower();
 
     // Local state
@@ -192,7 +197,10 @@
         const overview = document.getElementById("overviewPanel");
         overview.innerHTML = "";
         const title = document.createElement("div");
-        title.innerHTML = `<strong>Results: </strong>${payload.questionText || ""}`;
+        const strong = document.createElement("strong");
+        strong.textContent = "Results: ";
+        title.appendChild(strong);
+        title.appendChild(document.createTextNode(payload.questionText || ""));
         overview.appendChild(title);
 
         const lists = document.createElement("div");
@@ -202,7 +210,9 @@
             const wrapper = document.createElement("div");
             wrapper.className = "mb-2";
             const h = document.createElement("div");
-            h.innerHTML = `<strong>${titleText} (${(arr || []).length})</strong>`;
+            const strong = document.createElement("strong");
+            strong.textContent = `${titleText} (${(arr || []).length})`;
+            h.appendChild(strong);
             wrapper.appendChild(h);
             if (arr && arr.length > 0) {
                 const ul = document.createElement("ul");
@@ -234,7 +244,10 @@
         overview.innerHTML = "";
 
         const title = document.createElement("div");
-        title.innerHTML = `<strong>Overview: </strong>${payload.questionText || ""}`;
+        const strong = document.createElement("strong");
+        strong.textContent = "Overview: ";
+        title.appendChild(strong);
+        title.appendChild(document.createTextNode(payload.questionText || ""));
         overview.appendChild(title);
 
         const summary = document.createElement("div");
@@ -243,8 +256,11 @@
         const makeBadgeList = (label, arr, badgeClass) => {
             const container = document.createElement("div");
             const lbl = document.createElement("div");
-            lbl.innerHTML = `<strong>${label} (${(arr || []).length})</strong>`;
+            const lblStrong = document.createElement("strong");
+            lblStrong.textContent = `${label} (${(arr || []).length})`;
+            lbl.appendChild(lblStrong);
             container.appendChild(lbl);
+
             const wrap = document.createElement("div");
             (arr || []).forEach(p => {
                 const span = document.createElement("span");
@@ -252,12 +268,14 @@
                 span.textContent = p;
                 wrap.appendChild(span);
             });
-            if ((!arr || arr.length === 0)) {
+
+            if (!arr || arr.length === 0) {
                 const none = document.createElement("span");
                 none.className = "text-muted";
                 none.textContent = "(none)";
                 wrap.appendChild(none);
             }
+
             container.appendChild(wrap);
             return container;
         };
@@ -269,7 +287,6 @@
     }
 
     function showScores(payload) {
-        // payload: { leaderboard: [{ name, score, rank }, ...], totalPlayers, totalQuestions }
         if (!payload || !payload.leaderboard) return;
         const panel = document.getElementById("scoresPanel");
         panel.style.display = "block";
@@ -279,58 +296,87 @@
         title.textContent = "Final Scores";
         panel.appendChild(title);
 
-        // Build table
         const table = document.createElement("table");
         table.className = "table table-striped mt-2";
-        const thead = document.createElement("thead");
-        thead.innerHTML = "<tr><th>Rank</th><th>Player</th><th>Score</th><th>Percent</th></tr>";
-        table.appendChild(thead);
-        const tbody = document.createElement("tbody");
 
+        const thead = document.createElement("thead");
+        const headerRow = document.createElement("tr");
+        ["Rank", "Player", "Score", "Percent"].forEach(text => {
+            const th = document.createElement("th");
+            th.textContent = text;
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
         let myRow = null;
+
         payload.leaderboard.forEach(item => {
             const tr = document.createElement("tr");
+
             const tdRank = document.createElement("td");
             tdRank.textContent = item.rank;
+
             const tdName = document.createElement("td");
             tdName.textContent = item.name;
+
             const tdScore = document.createElement("td");
             tdScore.textContent = item.score;
+
             const tdPercent = document.createElement("td");
             const totalQ = payload.totalQuestions || 0;
             const percent = totalQ > 0 ? Math.round((item.score / totalQ) * 100) : 0;
             tdPercent.textContent = percent + "%";
+
             tr.appendChild(tdRank);
             tr.appendChild(tdName);
             tr.appendChild(tdScore);
             tr.appendChild(tdPercent);
 
-            // highlight current user
             if (currentUserName && item.name && item.name.toLowerCase() === currentUserName.toLowerCase()) {
                 tr.className = "table-success";
                 myRow = { name: item.name, score: item.score, rank: item.rank, percent: percent };
             }
+
             tbody.appendChild(tr);
         });
 
         table.appendChild(tbody);
         panel.appendChild(table);
 
-        // Personal summary for player (if not quizmaster)
         const summary = document.createElement("div");
         summary.className = "mt-3";
+
         if (isQuizMaster) {
-            summary.innerHTML = "<strong>Quizmaster view:</strong> full leaderboard shown above.";
+            const strong = document.createElement("strong");
+            strong.textContent = "Quizmaster view:";
+            summary.appendChild(strong);
+            summary.appendChild(document.createTextNode(" full leaderboard shown above."));
+        } else if (myRow) {
+            const strong1 = document.createElement("strong");
+            strong1.textContent = "Your score:";
+            summary.appendChild(strong1);
+            summary.appendChild(document.createTextNode(` ${myRow.score} — `));
+
+            const strong2 = document.createElement("strong");
+            strong2.textContent = "Position:";
+            summary.appendChild(strong2);
+            summary.appendChild(document.createTextNode(` ${myRow.rank}/${payload.totalPlayers} — `));
+
+            const strong3 = document.createElement("strong");
+            strong3.textContent = "Percent correct:";
+            summary.appendChild(strong3);
+            summary.appendChild(document.createTextNode(` ${myRow.percent}%`));
         } else {
-            if (myRow) {
-                summary.innerHTML = `<strong>Your score:</strong> ${myRow.score} — <strong>Position:</strong> ${myRow.rank}/${payload.totalPlayers} — <strong>Percent correct:</strong> ${myRow.percent}%`;
-            } else {
-                summary.innerHTML = "<strong>Your score:</strong> (not recorded)";
-            }
+            const strong = document.createElement("strong");
+            strong.textContent = "Your score:";
+            summary.appendChild(strong);
+            summary.appendChild(document.createTextNode(" (not recorded)"));
         }
+
         panel.appendChild(summary);
 
-        // Back to main menu button (visible to everyone)
         const backBtn = document.createElement("button");
         backBtn.className = "btn btn-primary mt-3";
         backBtn.textContent = "Back to main menu";
@@ -339,11 +385,9 @@
         });
         panel.appendChild(backBtn);
 
-        // Clear question area
         document.getElementById("questionText").textContent = "";
         document.getElementById("answersContainer").innerHTML = "";
         document.getElementById("overviewPanel").innerHTML = "";
-        // hide status as quiz finished
         document.getElementById("status").textContent = "Quiz finished. See final scores below.";
     }
 
@@ -515,10 +559,16 @@
     });
 
     connection.on("QuizFinished", function() {
-        // keep compatibility: if ShowScores was not followed, show a message
         if (document.getElementById("scoresPanel").innerHTML.trim() === "") {
             document.getElementById("status").textContent = "Quiz finished.";
-            document.getElementById("overviewPanel").innerHTML = "<div class='alert alert-info'>Quiz finished. Thank you for playing.</div>";
+
+            const overview = document.getElementById("overviewPanel");
+            overview.innerHTML = "";
+
+            const alertBox = document.createElement("div");
+            alertBox.className = "alert alert-info";
+            alertBox.textContent = "Quiz finished. Thank you for playing.";
+            overview.appendChild(alertBox);
         }
     });
 

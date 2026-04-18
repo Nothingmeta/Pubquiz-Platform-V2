@@ -12,6 +12,7 @@ using Pubquiz_Platform_V2.ViewModels;
 
 namespace PubquizPlatform.Controllers
 {
+    [AutoValidateAntiforgeryToken]
     [Authorize]
     [Route("Auth/[action]")]
     public class AuthController : Controller
@@ -387,6 +388,7 @@ namespace PubquizPlatform.Controllers
 
         [HttpPost]
         [Authorize]
+        [AutoValidateAntiforgeryToken]
         public IActionResult Logout()
         {
             var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId");

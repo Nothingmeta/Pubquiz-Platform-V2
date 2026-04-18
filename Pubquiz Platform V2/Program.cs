@@ -104,7 +104,27 @@ else
         x.UseNpgsql(connectionString));
 }
 
+// Add Antiforgery services
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "RequestVerificationToken";
+});
+
 var app = builder.Build();
+
+app.UseForwardedHeaders();
+
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    context.Response.Headers["Content-Security-Policy"] =
+        "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; form-action 'self'; " +
+        "img-src 'self' data:; connect-src 'self' ws: wss:; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; " +
+        "style-src 'self' 'unsafe-inline'";
+    await next();
+});
 
 // Auto-migrate database on startup
 using (var scope = app.Services.CreateScope())
@@ -179,7 +199,6 @@ else
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
     app.UseHttpsRedirection();  // Production only
-    app.UseForwardedHeaders();
 }
 
 app.UseStaticFiles();

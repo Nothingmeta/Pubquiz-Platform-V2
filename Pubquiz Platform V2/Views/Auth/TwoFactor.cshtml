@@ -18,10 +18,13 @@
     <p id="errorMessage" class="error-message" style="display:none;"></p>
 </div>
 
+@Html.AntiForgeryToken()
+
 <script>
     document.getElementById('verifyBtn').addEventListener('click', async function() {
         const code = document.getElementById('code').value;
         const errorEl = document.getElementById('errorMessage');
+        const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
 
         if (!code || code.length !== 6) {
             errorEl.textContent = 'Please enter a 6-digit code';
@@ -34,11 +37,10 @@
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': token
                 },
-                body: JSON.stringify({
-                    code: code
-                })
+                body: JSON.stringify({ code })
             });
 
             const data = await response.json();

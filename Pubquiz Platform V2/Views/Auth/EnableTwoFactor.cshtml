@@ -30,11 +30,15 @@
     <p id="errorMessage" class="error-message" style="display:none;"></p>
 </div>
 
+@using System.Text.Json
+@Html.AntiForgeryToken()
+
 <script>
     document.getElementById('confirmBtn').addEventListener('click', async function() {
         const code = document.getElementById('code').value;
         const errorEl = document.getElementById('errorMessage');
-        const secret = '@Model.TempSecret';
+        const secret = @Html.Raw(JsonSerializer.Serialize(Model.TempSecret ?? string.Empty));
+        const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
 
         if (!code || code.length !== 6) {
             errorEl.textContent = 'Please enter a 6-digit code';
@@ -53,7 +57,8 @@
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': token
                 },
                 body: JSON.stringify({
                     secret: secret,

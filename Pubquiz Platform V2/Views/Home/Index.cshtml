@@ -3,11 +3,10 @@
 }
 
 <div class="container d-flex flex-column align-items-center" style="min-height: 100vh;">
-    <!-- Hamburger menu -->
     <div class="w-100 d-flex justify-content-start mb-3">
         <div class="dropdown">
             <button class="btn btn-outline-secondary" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="bi bi-list"></i>
+                ☰
             </button>
             <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
                 <li><a class="dropdown-item" href="/">Home</a></li>
@@ -16,6 +15,7 @@
         </div>
         <span class="ms-3 align-self-center fw-bold">Pubquiz Platform</span>
     </div>
+
     <img src="../../images/PubquizPlatform.png" alt="Pubquiz Logo" class="mb-4" style="width: 200px; height: auto;">
     <h2 class="mb-4">Welkom</h2>
 
@@ -25,7 +25,9 @@
         {
             <a class="btn btn-secondary" href="/Quiz/Manage">Beheer quizzen</a>
         }
+
         <form method="post" action="/Auth/Logout" class="mt-4">
+            @Html.AntiForgeryToken()
             <button type="submit" class="btn btn-outline-danger w-100">Log uit</button>
         </form>
     </div>

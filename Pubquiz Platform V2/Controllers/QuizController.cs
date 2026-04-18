@@ -7,6 +7,7 @@ using Pubquiz_Platform_V2.ViewModels;
 
 namespace Pubquiz_Platform_V2.Controllers
 {
+    [AutoValidateAntiforgeryToken]
     [Authorize]
     public class QuizController : Controller
     {
@@ -167,7 +168,6 @@ namespace Pubquiz_Platform_V2.Controllers
 
 
         [HttpPost("Quiz/Edit/{quizSlug}")]
-        [IgnoreAntiforgeryToken]
         public IActionResult Edit(string quizSlug, QuizEditViewModel model, string action)
         {
             // Get current user's ID from claims

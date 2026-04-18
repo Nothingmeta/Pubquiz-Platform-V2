@@ -28,11 +28,16 @@
     <button onclick="leaveLobby()" class="btn btn-danger" id="leaveBtn">Verlaat Lobby</button>
 </div>
 
+@using System.Text.Json
+@{
+    var lobbyCodeJson = JsonSerializer.Serialize(Model.LobbyCode);
+    var currentUserNameJson = JsonSerializer.Serialize(ViewData["CurrentUserName"] ?? "");
+}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
 <script>
     let playerName = null;
-    const lobbyCode = "@Model.LobbyCode";
-    const currentUserName = "@(ViewData["CurrentUserName"] ?? "")";
+    const lobbyCode = @Html.Raw(lobbyCodeJson);
+    const currentUserName = @Html.Raw(currentUserNameJson);
     const isQuizMaster = @(isQuizMasterOfThisLobby ? "true" : "false");
 
     const connection = new signalR.HubConnectionBuilder()
