@@ -21,6 +21,7 @@ namespace Pubquiz_Platform_V2.Controllers
         }
 
         [HttpGet]
+        [Authorize(Roles = "quizmaster")]
         public IActionResult Manage()
         {
             // Get current user's ID from claims
@@ -46,6 +47,7 @@ namespace Pubquiz_Platform_V2.Controllers
 
 
         [HttpPost]
+        [Authorize(Roles = "quizmaster")]
         public IActionResult CreateQuick([FromBody] QuizCreateViewModel model)
         {
             if (string.IsNullOrWhiteSpace(model.QuizName))
@@ -94,6 +96,7 @@ namespace Pubquiz_Platform_V2.Controllers
         }
 
         [HttpGet("Quiz/Edit/{quizSlug}")]
+        [Authorize(Roles = "quizmaster")]
         public IActionResult Edit(string quizSlug, int question = 0)
         {
             // Get current user's ID from claims
@@ -168,6 +171,7 @@ namespace Pubquiz_Platform_V2.Controllers
 
         [HttpPost("Quiz/Edit/{quizSlug}")]
         [IgnoreAntiforgeryToken]
+        [Authorize(Roles = "quizmaster")]
         public IActionResult Edit(string quizSlug, QuizEditViewModel model, string action)
         {
             // Get current user's ID from claims
@@ -270,6 +274,7 @@ namespace Pubquiz_Platform_V2.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "quizmaster")]
         public IActionResult Delete(int id)
         {
             // Get current user's ID from claims
