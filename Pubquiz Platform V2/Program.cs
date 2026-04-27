@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Pubquiz_Platform.Data;
@@ -7,6 +8,14 @@ using Pubquiz_Platform_V2.Services;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// If running behind a reverse proxy / container, honor forwarded HTTPS/proto headers
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // JWT Configuration
 var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -131,11 +140,38 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.UseExceptionHandler("/Home/Error");
-    app.UseHsts();
-    app.UseHttpsRedirection();  // Production only
     app.UseForwardedHeaders();
+    app.UseExceptionHandler("/Home/Error");
+    app.UseHttpsRedirection();
+    app.UseHsts();
 }
+
+// Security headers
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        var headers = context.Response.Headers;
+
+        headers["X-Content-Type-Options"] = "nosniff";
+        headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+
+        headers["Content-Security-Policy"] =
+            "default-src 'self'; " +
+            "base-uri 'self'; " +
+            "frame-ancestors 'self'; " +
+            "object-src 'none'; " +
+            "img-src 'self' data:; " +
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " +
+            "font-src 'self' data: https://cdn.jsdelivr.net; " +
+            "connect-src 'self' https: wss:;";
+        
+        return Task.CompletedTask;
+    });
+
+    await next();
+});
 
 app.UseStaticFiles();
 app.UseRouting();
