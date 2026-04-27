@@ -42,7 +42,15 @@ namespace PubquizPlatform.Controllers
 
         [HttpGet]
         [AllowAnonymous]
-        public IActionResult Register() => View();
+        public IActionResult Register()
+        {
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                return RedirectToAction("Index", "Home");
+            }
+
+            return View();
+        }
 
         [HttpPost]
         [AllowAnonymous]
@@ -76,7 +84,15 @@ namespace PubquizPlatform.Controllers
 
         [HttpGet]
         [AllowAnonymous]
-        public IActionResult Login() => View();
+        public IActionResult Login()
+        {
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                return RedirectToAction("Index", "Home");
+            }
+
+            return View();
+        }
 
         [HttpPost]
         [AllowAnonymous]
