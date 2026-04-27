@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.CookiePolicy;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -111,6 +112,22 @@ else
         x.UseNpgsql(connectionString));
 }
 
+// Add Anti-forgery services
+builder.Services.AddAntiforgery(options =>
+{
+    options.Cookie.Name = ".Pubquiz.Antiforgery";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+});
+
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.Secure = CookieSecurePolicy.Always;
+    options.HttpOnly = HttpOnlyPolicy.Always;
+    options.MinimumSameSitePolicy = SameSiteMode.Strict;
+});
+
 var app = builder.Build();
 
 // Auto-migrate database on startup
@@ -177,6 +194,7 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseCookiePolicy();
 
 // Add a simple root redirect - redirect before routing to avoid auth checks
 app.MapGet("/", async context =>
@@ -211,3 +229,4 @@ catch (Exception ex)
     Console.WriteLine(ex.StackTrace);
     throw;
 }
+
